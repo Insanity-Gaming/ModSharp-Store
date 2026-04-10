@@ -1,10 +1,27 @@
-using Sharp.Shared;
+using System;
+using System.IO;
+using System.Text.Json;
+using InsanityGaming.Store.Configs;
+using InsanityGaming.Store.Interfaces;
+using InsanityGaming.Store.Modules;
+using InsanityGaming.Store.Repository;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Sharp.Shared;
+using SqlSugar;
 
-namespace Store;
+namespace InsanityGaming.Store;
 
 public class Store : IModSharpModule
 {
+    private readonly IServiceProvider _services;
+    private readonly InterfaceBridge _bridge;
+    private readonly ILogger<Store> _logger;
+
+    private IConfigurationRoot _configRoot = null!;
+    private volatile StoreConfig _config = null!;
+
     public Store(
         ISharedSystem sharedSystem,
         string dllPath,
@@ -13,17 +30,128 @@ public class Store : IModSharpModule
         IConfiguration configuration,
         bool hotReload)
     {
+        _bridge = new InterfaceBridge(dllPath, sharpPath, version, sharedSystem);
 
+        var configPath = Path.Combine(_bridge.ConfigPath, "store.json");
+
+        // --- Ensure config exists ---
+        if (!File.Exists(configPath))
+        {
+            var defaultConfig = new StoreConfig();
+
+            var json = JsonSerializer.Serialize(defaultConfig, new JsonSerializerOptions
+            {
+                WriteIndented = true
+            });
+
+            File.WriteAllText(configPath, json);
+        }
+
+        // --- Load config ---
+        _configRoot = new ConfigurationBuilder()
+            .SetBasePath(_bridge.ConfigPath)
+            .AddJsonFile("store.json", optional: false, reloadOnChange: true)
+            .Build();
+
+        // Bind initial config
+        _config = new StoreConfig();
+        _configRoot.Bind(_config);
+
+        // Hook reload
+        RegisterReload();
+
+        // --- DI ---
+        var services = new ServiceCollection();
+
+        services.AddSingleton(_bridge);
+        services.AddSingleton(sharedSystem);
+
+        services.AddSingleton(_bridge.LoggerFactory);
+        services.AddLogging();
+
+        services.AddSingleton(this); // optional if you want access elsewhere
+
+        services.AddSingleton<ISqlSugarClient>(_ => new SqlSugarClient(new ConnectionConfig
+        {
+            DbType = DbType.MySql,
+            ConnectionString = $"Server={_config.DbHost};Port={_config.DbPort};Database={_config.DbName};Uid={_config.DbUser};Pwd={_config.DbPassword};",
+            IsAutoCloseConnection = true
+        }));
+
+        services.AddSingleton<IUnitOfWork, UnitOfWork>();
+        services.AddSingleton<IUserRepository, UserRepository>();
+        services.AddSingleton<IInventoryRepository, InventoryRepository>();
+        services.AddSingleton<IEquipmentRepository, EquipmentRepository>();
+        services.AddSingleton<IModule, DatabaseModule>();
+
+        _services = services.BuildServiceProvider();
+
+        _logger = _services.GetRequiredService<ILogger<Store>>();
+
+        _logger.LogInformation("Store module constructed (HotReload: {HotReload})", hotReload);
     }
 
     public bool Init()
     {
+        foreach (var service in _services.GetServices<IModule>())
+        {
+            if(!service.Init())
+                _logger.LogError($"Store Module {service.GetType().Name} could not be initialized.");
+        }
+        
+        _logger.LogInformation("Store Init");
         return true;
     }
 
     public void Shutdown()
     {
+        _logger.LogInformation("Store Shutdown");
+        
+        foreach (var service in _services.GetServices<IModule>())
+        {
+            service.Shutdown();
+        }
+
+        if (_services is IDisposable disposable)
+            disposable.Dispose();
     }
+
+    private void OnConfigReload()
+    {
+        foreach (var service in _services.GetServices<IModule>())
+        {
+            service.ConfigReload(_config);
+        }
+    }
+
+    private void RegisterReload()
+    {
+        _configRoot.GetReloadToken().RegisterChangeCallback(_ =>
+        {
+            try
+            {
+                _logger.LogInformation("Config reload detected");
+
+                var newConfig = new StoreConfig();
+                _configRoot.Bind(newConfig);
+
+                _config = newConfig;
+                OnConfigReload();
+
+                _logger.LogInformation("Config successfully reloaded");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to reload config");
+            }
+
+            RegisterReload();
+
+        }, null);
+    }
+
+    // Easy access anywhere inside this class
+    private StoreConfig Config => _config;
 
     string IModSharpModule.DisplayName => "Store";
     string IModSharpModule.DisplayAuthor => "Retro";
