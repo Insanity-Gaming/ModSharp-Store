@@ -8,11 +8,11 @@ namespace InsanityGaming.Store.Models;
 public class Equipment
 {
     [SugarColumn(IsPrimaryKey = true)]
-    public required ulong Id { get; set; }
+    public ulong Id { get; set; }
     [SugarColumn(IsNullable = false)]
-    public required string Unique { get; set; }
+    public string Unique { get; set; } = string.Empty;
     [SugarColumn(IsNullable = false)]
-    public required int Slot { get; set; }
+    public int Slot { get; set; }
     [SugarColumn(IsNullable = false)]
-    public required int Team { get; set; }
+    public int Team { get; set; }
 }

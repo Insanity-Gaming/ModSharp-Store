@@ -9,5 +9,5 @@ public class Inventory
     [SugarColumn(IsPrimaryKey = true)]
     public ulong Id { get; set; }
     [SugarColumn(IsNullable = false)]
-    public required string Unique { get; set; }
+    public string Unique { get; set; } = string.Empty;
 }
