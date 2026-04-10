@@ -1,6 +1,6 @@
 namespace InsanityGaming.Store.Interfaces;
 
-public interface IRepository<T> where T : class, new()
+public interface IRepository<T> where T : class
 {
     Task<T?> GetByIdAsync(object id);
     Task<List<T>> GetAllAsync();
