@@ -6,5 +6,5 @@ public interface ICreditsApi
 
     bool SetCredits(ulong steamId, uint amount);
     uint? GetCredits(ulong steamId);
-    bool AddCredits(ulong steamId, uint amount);
+    bool AddCredits(ulong steamId, int amount);
 }
