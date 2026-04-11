@@ -4,6 +4,6 @@ namespace InsanityGaming.Store.Interfaces;
 
 public interface IUserRepository : IRepository<Users>
 {
-    Task<Users?> GetByNameAsync(string name);
+    Task<Users?> GetByIdAsync(ulong id);
     Task<bool> UpdateCreditsAsync(ulong id, uint credits);
 }
