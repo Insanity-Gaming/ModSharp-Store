@@ -8,6 +8,7 @@ public class StoreConfig : IConfig
     public int CreditFrequency { get; set; } = 5;
     public int CreditReward { get; set; } = 5;
     public float CreditMultiplier { get; set; } = 1.0f;
+    public float DynamicMultiplierMax { get; set; } = 5.0f;
 
     public string DbHost { get; set; } = "localhost";
     public int DbPort { get; set; } = 3306;
