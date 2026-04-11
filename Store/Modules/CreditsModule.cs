@@ -124,15 +124,21 @@ public class CreditsModule : IModule, ICreditsApi
         return true;
     }
 
-    public bool AddCreditsBySlot(PlayerSlot slot, uint amount)
+    public bool AddCreditsBySlot(PlayerSlot slot, int amount)
     {
-        if (!_credits.ContainsKey(slot))
-        {
-            _credits[slot] = amount;
-            return true;
-        }
+        var current = _credits.GetValueOrDefault(slot);
 
-        _credits[slot] += amount;
+        var result = (long)current + amount;
+
+        // Prevent negative
+        if (result < 0)
+            return false;
+
+        // Prevent overflow
+        if (result > uint.MaxValue)
+            result = uint.MaxValue;
+
+        _credits[slot] = (uint)result;
         return true;
     }
 
@@ -155,7 +161,6 @@ public class CreditsModule : IModule, ICreditsApi
             return SetCreditsBySlot(client.Slot, amount);
         }
 
-        // Offline → persist directly
         try
         {
             _repository.UpdateCreditsAsync(steamId, amount).Wait();
@@ -183,7 +188,6 @@ public class CreditsModule : IModule, ICreditsApi
             return GetCreditsBySlot(client.Slot);
         }
 
-        // Offline → fetch from DB
         try
         {
             return _repository.GetByIdAsync(steamId).Result?.Credits;
@@ -195,7 +199,7 @@ public class CreditsModule : IModule, ICreditsApi
         }
     }
 
-    public bool AddCredits(ulong steamId, uint amount)
+    public bool AddCredits(ulong steamId, int amount)
     {
         var steam = new SteamID(steamId);
         if (!steam.IsValidUserId())
@@ -210,16 +214,21 @@ public class CreditsModule : IModule, ICreditsApi
             return AddCreditsBySlot(client.Slot, amount);
         }
 
-        // Offline → read + update
         try
         {
             var user = _repository.GetByIdAsync(steamId).Result;
             if (user is null)
                 return false;
 
-            var newAmount = user.Credits + amount;
-            _repository.UpdateCreditsAsync(steamId, newAmount).Wait();
+            var result = (long)user.Credits + amount;
 
+            if (result < 0)
+                return false;
+
+            if (result > uint.MaxValue)
+                result = uint.MaxValue;
+
+            _repository.UpdateCreditsAsync(steamId, (uint)result).Wait();
             return true;
         }
         catch (Exception ex)
