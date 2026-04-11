@@ -1,15 +1,48 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
+        <!-- Target -->
         <TargetFramework>net10.0</TargetFramework>
+
+        <!-- Names -->
+        <AssemblyName>InsanityGaming.Store</AssemblyName>
+        <RootNamespace>InsanityGaming.Store</RootNamespace>
+
+        <!-- Language / Quality -->
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
-        <AssemblyName>Store</AssemblyName>
+        <LangVersion>preview</LangVersion>
+
+        <DebugType>embedded</DebugType>
+        <DebugSymbols>true</DebugSymbols>
+
+        <!-- Build -->
+        <Optimize>true</Optimize>
+        <Deterministic>true</Deterministic>
+
+        <!-- Versioning (plays nice with your CI) -->
+        <Version>1.0.0</Version>
+        <AssemblyVersion>1.0.0.0</AssemblyVersion>
+        <FileVersion>1.0.0.0</FileVersion>
+
+        <!-- Output -->
+        <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+
+        <!-- Trimming / runtime safety -->
+        <PublishTrimmed>false</PublishTrimmed> <!-- DO NOT trim for ModSharp -->
+        <InvariantGlobalization>true</InvariantGlobalization>
+
+        <!-- Nullable warnings stricter (optional but good) -->
+        <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="ModSharp.Sharp.Shared" Version="*" PrivateAssets="all"/>
-
+        <PackageReference Include="ModSharp.Sharp.Shared" Version="*" PrivateAssets="all" />
+        <PackageReference Include="SqlSugarCore" Version="5.1.4.214" />
     </ItemGroup>
-</Project>
 
+    <ItemGroup>
+      <ProjectReference Include="..\Store.Shared\Store.Shared.csproj" />
+    </ItemGroup>
+
+</Project>
