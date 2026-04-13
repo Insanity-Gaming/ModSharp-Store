@@ -15,4 +15,19 @@ public class EquipmentRepository : BaseRepository<Equipment>, IEquipmentReposito
         await Db.Queryable<Equipment>()
             .Where(e => e.Id == steamId && e.Slot == slot)
             .FirstAsync();
+
+    public async Task<List<Equipment>> GetByPlayerAndTeamAsync(ulong steamId, int team) =>
+        await Db.Queryable<Equipment>()
+            .Where(e => e.Id == steamId && e.Team == team)
+            .ToListAsync();
+
+    public async Task<Equipment?> GetByPlayerAndSlotAndTeamAsync(ulong steamId, int slot, int team) =>
+        await Db.Queryable<Equipment>()
+            .Where(e => e.Id == steamId && e.Slot == slot && e.Team == team)
+            .FirstAsync();
+
+    public async Task<bool> DeleteByPlayerSlotAndTeamAsync(ulong steamId, int slot, int team) =>
+        await Db.Deleteable<Equipment>()
+            .Where(e => e.Id == steamId && e.Slot == slot && e.Team == team)
+            .ExecuteCommandAsync() > 0;
 }

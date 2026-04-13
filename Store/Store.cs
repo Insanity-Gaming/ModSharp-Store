@@ -3,8 +3,10 @@ using System.IO;
 using System.Text.Json;
 using InsanityGaming.Store.Configs;
 using InsanityGaming.Store.Interfaces;
+using InsanityGaming.Store.Items;
 using InsanityGaming.Store.Modules;
 using InsanityGaming.Store.Repository;
+using InsanityGaming.Store.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -82,7 +84,20 @@ public class Store : IModSharpModule
         services.AddSingleton<IUserRepository, UserRepository>();
         services.AddSingleton<IInventoryRepository, InventoryRepository>();
         services.AddSingleton<IEquipmentRepository, EquipmentRepository>();
+
+        // Register the live config instance so modules can inject StoreConfig directly
+        services.AddSingleton(_config);
+
+        // Item types — add one line per item type as new types are created
+        services.AddSingleton<IItemType, ItemPlayerModels>();
+
+        // Item and equipment services
+        services.AddSingleton<IItemService, ItemService>();
+        services.AddSingleton<IEquipmentManager, EquipmentManager>();
+
+        // Modules — DatabaseModule first (creates tables), then EquipmentModule
         services.AddSingleton<IModule, DatabaseModule>();
+        services.AddSingleton<IModule, EquipmentModule>();
 
         _services = services.BuildServiceProvider();
 
