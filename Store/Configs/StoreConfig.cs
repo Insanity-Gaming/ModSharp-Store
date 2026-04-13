@@ -15,4 +15,6 @@ public class StoreConfig : IConfig
     public string DbName { get; set; } = "store";
     public string DbUser { get; set; } = "root";
     public string DbPassword { get; set; } = "";
+
+    public List<string> EnabledItems { get; set; } = [];
 }
