@@ -1,0 +1,36 @@
+<Project>
+
+  <Target Name="CopyPluginOutput" AfterTargets="Build">
+
+    <PropertyGroup>
+      <PluginOutput>$(MSBuildProjectDirectory)/../game/sharp/modules/store/</PluginOutput>
+    </PropertyGroup>
+
+    <MakeDir Directories="$(PluginOutput)" />
+
+    <ItemGroup>
+      <PluginFiles Include="$(TargetPath)" />
+      <PluginFiles Include="$(TargetDir)$(AssemblyName).deps.json" Condition="Exists('$(TargetDir)$(AssemblyName).deps.json')" />
+      <PluginFiles Include="$(TargetDir)$(AssemblyName).pdb" Condition="Exists('$(TargetDir)$(AssemblyName).pdb')" />
+    </ItemGroup>
+
+    <Copy
+      SourceFiles="@(PluginFiles)"
+      DestinationFolder="$(PluginOutput)"
+      SkipUnchangedFiles="true" />
+
+    <ItemGroup>
+      <GameDataFiles Include="$(MSBuildProjectDirectory)/gamedata/**/*" />
+    </ItemGroup>
+
+    <MakeDir Directories="$(MSBuildProjectDirectory)/../game/sharp/gamedata" Condition="'@(GameDataFiles)' != ''" />
+
+    <Copy
+      Condition="'@(GameDataFiles)' != ''"
+      SourceFiles="@(GameDataFiles)"
+      DestinationFolder="$(MSBuildProjectDirectory)/../game/sharp/gamedata/%(RecursiveDir)"
+      SkipUnchangedFiles="true" />
+
+  </Target>
+
+</Project>

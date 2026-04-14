@@ -1,0 +1,24 @@
+<Project>
+
+  <Target Name="CopyPluginOutput" AfterTargets="Build">
+
+    <PropertyGroup>
+      <PluginOutput>$(MSBuildProjectDirectory)/../game/sharp/shared/InsanityGaming.Store.Shared/</PluginOutput>
+    </PropertyGroup>
+
+    <MakeDir Directories="$(PluginOutput)" />
+
+    <ItemGroup>
+      <PluginFiles Include="$(TargetPath)" />
+      <PluginFiles Include="$(TargetDir)$(AssemblyName).deps.json" Condition="Exists('$(TargetDir)$(AssemblyName).deps.json')" />
+      <PluginFiles Include="$(TargetDir)$(AssemblyName).pdb" Condition="Exists('$(TargetDir)$(AssemblyName).pdb')" />
+    </ItemGroup>
+
+    <Copy
+      SourceFiles="@(PluginFiles)"
+      DestinationFolder="$(PluginOutput)"
+      SkipUnchangedFiles="true" />
+
+  </Target>
+
+</Project>

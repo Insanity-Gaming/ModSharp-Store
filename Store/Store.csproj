@@ -5,7 +5,7 @@
         <TargetFramework>net10.0</TargetFramework>
 
         <!-- Names -->
-        <AssemblyName>InsanityGaming.Store</AssemblyName>
+        <AssemblyName>Store</AssemblyName>
         <RootNamespace>InsanityGaming.Store</RootNamespace>
 
         <!-- Language / Quality -->
