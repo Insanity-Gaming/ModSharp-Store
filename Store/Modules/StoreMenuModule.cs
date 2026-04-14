@@ -14,7 +14,7 @@ namespace InsanityGaming.Store.Modules;
 
 public class StoreMenuModule : IModule, IClientListener
 {
-    private const string MenuManagerAssemblyName = "Sharp.Modules.MenuManager";
+    private const string MenuManagerAssemblyName  = "Sharp.Modules.MenuManager";
     private const string AdminManagerAssemblyName = "Sharp.Modules.AdminManager";
 
     private readonly InterfaceBridge _bridge;
@@ -91,6 +91,22 @@ public class StoreMenuModule : IModule, IClientListener
     }
 
     public void ConfigReload(IConfig config) { }
+
+    public void OnLibraryConnected(string name)
+    {
+        if (name.Equals(MenuManagerAssemblyName, StringComparison.OrdinalIgnoreCase))
+            TryResolveMenuManager();
+        else if (name.Equals(AdminManagerAssemblyName, StringComparison.OrdinalIgnoreCase))
+            TryResolveAdminManager();
+    }
+
+    public void OnLibraryDisconnect(string name) { }
+
+    public void OnAllModulesLoaded()
+    {
+        TryResolveMenuManager(logFailure: true);
+        TryResolveAdminManager();
+    }
 
     // -------------------------
     // IClientListener

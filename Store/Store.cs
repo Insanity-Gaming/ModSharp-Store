@@ -120,15 +120,33 @@ public class Store : IModSharpModule
             if(!service.Init())
                 _logger.LogError($"Store Module {service.GetType().Name} could not be initialized.");
         }
-        
+
         _logger.LogInformation("Store Init");
         return true;
+    }
+
+    public void OnLibraryConnected(string name)
+    {
+        foreach (var service in _services.GetServices<IModule>())
+            service.OnLibraryConnected(name);
+    }
+
+    public void OnLibraryDisconnect(string name)
+    {
+        foreach (var service in _services.GetServices<IModule>())
+            service.OnLibraryDisconnect(name);
+    }
+
+    public void OnAllModulesLoaded()
+    {
+        foreach (var service in _services.GetServices<IModule>())
+            service.OnAllModulesLoaded();
     }
 
     public void Shutdown()
     {
         _logger.LogInformation("Store Shutdown");
-        
+
         foreach (var service in _services.GetServices<IModule>())
         {
             service.Shutdown();
