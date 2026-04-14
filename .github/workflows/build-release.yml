@@ -34,8 +34,19 @@ jobs:
             -p:AssemblyVersion=1.0.${{ github.run_number }} \
             -p:FileVersion=1.0.${{ github.run_number }}
 
+      - name: Copy build output
+        run: |
+          mkdir -p game/sharp/modules/store
+          mkdir -p game/sharp/shared/InsanityGaming.Store.Shared
+          cp Store/bin/Release/net10.0/Store.dll game/sharp/modules/store/Store.dll
+          cp Store/bin/Release/net10.0/Store.deps.json game/sharp/modules/store/Store.deps.json
+          cp Store.Shared/bin/Release/net10.0/InsanityGaming.Store.Shared.dll game/sharp/shared/InsanityGaming.Store.Shared/InsanityGaming.Store.Shared.dll
+          cp Store.Shared/bin/Release/net10.0/InsanityGaming.Store.Shared.deps.json game/sharp/shared/InsanityGaming.Store.Shared/InsanityGaming.Store.Shared.deps.json
+
       - name: Copy examples
-        run: cp -r Store/Store/examples/. game/sharp/configs/
+        run: |
+          mkdir -p game/sharp/configs
+          cp -r Store/examples/. game/sharp/configs/
 
       - name: Zip module
         run: zip -r module.zip game
