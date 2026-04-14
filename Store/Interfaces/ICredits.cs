@@ -5,7 +5,7 @@ namespace InsanityGaming.Store.Interfaces;
 
 public interface ICredits : ICreditsApi
 {
-    int GetCreditsBySlot(PlayerSlot slot);
-    bool SetCreditsBySlot(PlayerSlot slot, int amount);
+    uint GetCreditsBySlot(PlayerSlot slot);
+    bool SetCreditsBySlot(PlayerSlot slot, uint amount);
     bool AddCreditsBySlot(PlayerSlot slot, int amount);
 }

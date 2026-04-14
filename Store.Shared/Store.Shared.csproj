@@ -10,4 +10,8 @@
         
     </PropertyGroup>
 
+    <ItemGroup>
+      <PackageReference Include="ModSharp.Sharp.Modules.MenuManager.Shared" Version="2.1.118" />
+    </ItemGroup>
+
 </Project>

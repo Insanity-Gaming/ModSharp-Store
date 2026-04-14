@@ -7,7 +7,7 @@ using Sharp.Shared.Units;
 
 namespace InsanityGaming.Store.Modules;
 
-public class CreditsModule : IModule, ICreditsApi
+public class CreditsModule : IModule, ICreditsApi, ICredits
 {
     private readonly InterfaceBridge _bridge;
     private readonly ILogger<CreditsModule> _logger;

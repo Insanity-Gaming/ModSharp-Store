@@ -94,10 +94,17 @@ public class Store : IModSharpModule
         // Item and equipment services
         services.AddSingleton<IItemService, ItemService>();
         services.AddSingleton<IEquipmentManager, EquipmentManager>();
+        services.AddSingleton<IPurchaseService, PurchaseService>();
 
-        // Modules — DatabaseModule first (creates tables), then EquipmentModule
+        // CreditsModule — registered as concrete type so IModule + ICredits can both resolve the same instance
+        services.AddSingleton<CreditsModule>();
+        services.AddSingleton<ICredits>(sp => sp.GetRequiredService<CreditsModule>());
+
+        // Modules — DatabaseModule first (creates tables), then EquipmentModule, CreditsModule, StoreMenuModule
         services.AddSingleton<IModule, DatabaseModule>();
         services.AddSingleton<IModule, EquipmentModule>();
+        services.AddSingleton<IModule>(sp => sp.GetRequiredService<CreditsModule>());
+        services.AddSingleton<IModule, StoreMenuModule>();
 
         _services = services.BuildServiceProvider();
 
