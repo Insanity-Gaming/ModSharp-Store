@@ -34,6 +34,9 @@ jobs:
             -p:AssemblyVersion=1.0.${{ github.run_number }} \
             -p:FileVersion=1.0.${{ github.run_number }}
 
+      - name: Copy examples
+        run: cp -r Store/Store/examples/. game/sharp/configs/
+
       - name: Zip module
         run: zip -r module.zip game
 
