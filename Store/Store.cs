@@ -1,12 +1,14 @@
 using System;
 using System.IO;
 using System.Text.Json;
+using InsanityGaming.Store.Api;
 using InsanityGaming.Store.Configs;
 using InsanityGaming.Store.Interfaces;
 using InsanityGaming.Store.Items;
 using InsanityGaming.Store.Modules;
 using InsanityGaming.Store.Repository;
 using InsanityGaming.Store.Services;
+using InsanityGaming.Store.Shared;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -100,11 +102,18 @@ public class Store : IModSharpModule
         services.AddSingleton<CreditsModule>();
         services.AddSingleton<ICredits>(sp => sp.GetRequiredService<CreditsModule>());
 
-        // Modules — DatabaseModule first (creates tables), then EquipmentModule, CreditsModule, StoreMenuModule
+        // API adapters — registered as concrete types so IItemsApi + IEquipmentApi can both resolve the same instance
+        services.AddSingleton<ItemsApiAdapter>();
+        services.AddSingleton<EquipmentApiAdapter>();
+        services.AddSingleton<IItemsApi>(sp => sp.GetRequiredService<ItemsApiAdapter>());
+        services.AddSingleton<IEquipmentApi>(sp => sp.GetRequiredService<EquipmentApiAdapter>());
+
+        // Modules — DatabaseModule first (creates tables), then EquipmentModule, CreditsModule, StoreMenuModule, ApiModule
         services.AddSingleton<IModule, DatabaseModule>();
         services.AddSingleton<IModule, EquipmentModule>();
         services.AddSingleton<IModule>(sp => sp.GetRequiredService<CreditsModule>());
         services.AddSingleton<IModule, StoreMenuModule>();
+        services.AddSingleton<IModule, ApiModule>();
 
         _services = services.BuildServiceProvider();
 

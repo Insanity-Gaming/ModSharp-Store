@@ -13,4 +13,9 @@ public class InventoryRepository : BaseRepository<Inventory>, IInventoryReposito
 
     public async Task<bool> DeleteByPlayerAsync(ulong steamId) =>
         await Db.Deleteable<Inventory>().Where(i => i.Id == steamId).ExecuteCommandAsync() > 0;
+
+    public async Task<bool> DeleteByPlayerAndUniqueAsync(ulong steamId, string unique) =>
+        await Db.Deleteable<Inventory>()
+            .Where(i => i.Id == steamId && i.Unique == unique)
+            .ExecuteCommandAsync() > 0;
 }
