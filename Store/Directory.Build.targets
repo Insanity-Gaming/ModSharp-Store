@@ -31,6 +31,18 @@
       DestinationFolder="$(MSBuildProjectDirectory)/../game/sharp/gamedata/%(RecursiveDir)"
       SkipUnchangedFiles="true" />
 
+    <ItemGroup>
+      <ConfigFiles Include="$(MSBuildProjectDirectory)/configs/**/*" />
+    </ItemGroup>
+
+    <MakeDir Directories="$(MSBuildProjectDirectory)/../game/sharp/configs" Condition="'@(ConfigFiles)' != ''" />
+
+    <Copy
+      Condition="'@(ConfigFiles)' != ''"
+      SourceFiles="@(ConfigFiles)"
+      DestinationFolder="$(MSBuildProjectDirectory)/../game/sharp/configs/%(RecursiveDir)"
+      SkipUnchangedFiles="true" />
+
   </Target>
 
 </Project>
