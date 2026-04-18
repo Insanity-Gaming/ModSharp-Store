@@ -94,6 +94,7 @@ public class Store : IModSharpModule
         services.AddSingleton<IItemType, ItemPlayerModels>();
 
         // Item and equipment services
+        services.AddSingleton<SessionItemStore>();
         services.AddSingleton<IItemService, ItemService>();
         services.AddSingleton<IEquipmentManager, EquipmentManager>();
         services.AddSingleton<IPurchaseService, PurchaseService>();
@@ -110,6 +111,7 @@ public class Store : IModSharpModule
 
         // Modules — DatabaseModule first (creates tables), then EquipmentModule, CreditsModule, StoreMenuModule, ApiModule
         services.AddSingleton<IModule, DatabaseModule>();
+        services.AddSingleton<IModule, ExpiryCleanupService>();
         services.AddSingleton<IModule, EquipmentModule>();
         services.AddSingleton<IModule>(sp => sp.GetRequiredService<CreditsModule>());
         services.AddSingleton<IModule, StoreMenuModule>();

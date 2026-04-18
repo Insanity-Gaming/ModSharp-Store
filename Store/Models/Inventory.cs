@@ -10,4 +10,6 @@ public class Inventory
     public ulong Id { get; set; }
     [SugarColumn(IsNullable = false)]
     public string Unique { get; set; } = string.Empty;
+    [SugarColumn(IsNullable = true)]
+    public DateTime? ExpiresAt { get; set; }
 }

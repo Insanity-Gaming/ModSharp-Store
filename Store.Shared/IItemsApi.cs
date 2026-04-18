@@ -27,4 +27,18 @@ public interface IItemsApi
     /// Returns an empty list if the player has no items or does not exist.
     /// </summary>
     Task<IReadOnlyList<string>> GetItemsAsync(ulong steamId);
+
+    /// <summary>
+    /// Grants a session-only item to a player. Never persisted to the database.
+    /// Automatically removed when the player disconnects.
+    /// Returns false if the player already has the item (session or persistent).
+    /// </summary>
+    Task<bool> GiveTemporaryItemAsync(ulong steamId, string unique);
+
+    /// <summary>
+    /// Grants a timed item to a player. Persisted to the database with an expiry timestamp.
+    /// Survives reconnects and is silently removed after the duration elapses.
+    /// Returns false if the player already has the item (session or persistent).
+    /// </summary>
+    Task<bool> GiveTimedItemAsync(ulong steamId, string unique, TimeSpan duration);
 }
