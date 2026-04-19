@@ -206,6 +206,12 @@ public class StoreMenuModule : IModule, IClientListener
                             controller.Next(BuildEquippedMenu(controller.Client)))
                         .ExitItem()
                         .Build();
+
+        _mainMenu.SetTitle(gameClient =>
+        {
+            var cache = GetOrCreateCache(gameClient.SteamId);
+            return $"Store — {cache.Credits} credits";
+        });
     }
 
     // -------------------------

@@ -115,6 +115,7 @@ public class Store : IModSharpModule
         services.AddSingleton<IModule, EquipmentModule>();
         services.AddSingleton<IModule>(sp => sp.GetRequiredService<CreditsModule>());
         services.AddSingleton<IModule, StoreMenuModule>();
+        services.AddSingleton<IModule, AdminCommandModule>();
         services.AddSingleton<IModule, ApiModule>();
 
         _services = services.BuildServiceProvider();
