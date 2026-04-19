@@ -1,5 +1,5 @@
 using InsanityGaming.Store.Interfaces;
-using InsanityGaming.Store.Repository;
+using InsanityGaming.Store.Models;
 using InsanityGaming.Store.Services;
 using InsanityGaming.Store.Shared;
 using Microsoft.Extensions.Logging;
