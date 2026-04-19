@@ -1,6 +1,5 @@
 using InsanityGaming.Store.Configs;
 using InsanityGaming.Store.Interfaces;
-using InsanityGaming.Store.Repository;
 using InsanityGaming.Store.Services;
 using InsanityGaming.Store.Shared;
 using Microsoft.Extensions.Logging;
@@ -41,12 +40,6 @@ public class EquipmentModule : IModule, IEventListener, IEquipment
     {
         _itemService.LoadAll();
         _bridge.EventManager.InstallEventListener(this);
-
-        _bridge.ModuleManager.RegisterSharpModuleInterface<IEquipmentApi>(
-            _plugin,
-            IEquipmentApi.Identity,
-            this
-        );
 
         _logger.LogInformation("EquipmentModule initialized");
         return true;

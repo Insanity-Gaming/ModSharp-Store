@@ -1,7 +1,6 @@
 using InsanityGaming.Store.Interfaces;
 using InsanityGaming.Store.Models;
 using InsanityGaming.Store.Services;
-using InsanityGaming.Store.Shared;
 using Microsoft.Extensions.Logging;
 
 namespace InsanityGaming.Store.Modules;
@@ -33,12 +32,6 @@ public class ItemsModule : IModule, IItems
 
     public bool Init()
     {
-        _bridge.ModuleManager.RegisterSharpModuleInterface<IItemsApi>(
-            _plugin,
-            IItemsApi.Identity,
-            this
-        );
-
         _logger.LogInformation("ItemsModule initialized");
         return true;
     }

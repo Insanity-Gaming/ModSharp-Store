@@ -1,13 +1,12 @@
 ﻿using InsanityGaming.Store.Configs;
 using InsanityGaming.Store.Interfaces;
-using InsanityGaming.Store.Shared;
 using Microsoft.Extensions.Logging;
 using Sharp.Shared.Enums;
 using Sharp.Shared.Units;
 
 namespace InsanityGaming.Store.Modules;
 
-public class CreditsModule : IModule, ICreditsApi, ICredits
+public class CreditsModule : IModule, ICredits
 {
     private readonly InterfaceBridge _bridge;
     private readonly ILogger<CreditsModule> _logger;
@@ -35,12 +34,6 @@ public class CreditsModule : IModule, ICreditsApi, ICredits
 
     public bool Init()
     {
-        _bridge.ModuleManager.RegisterSharpModuleInterface<ICreditsApi>(
-            _plugin,
-            ICreditsApi.Identity,
-            this
-        );
-
         _timer = _bridge.ModSharp.PushTimer(AwardCredits, _config.CreditFrequency, GameTimerFlags.Repeatable);
 
         return true;
