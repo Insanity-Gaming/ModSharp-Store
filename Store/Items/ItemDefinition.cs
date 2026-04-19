@@ -4,6 +4,7 @@ public class ItemDefinition
 {
     public string Unique { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
+    public string? Model { get; set; }
     public uint Price { get; set; }
     public int Team { get; set; }
     public string? Permission { get; set; }

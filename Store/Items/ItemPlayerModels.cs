@@ -14,8 +14,9 @@ public class ItemPlayerModels : IItemType
 
     public void Equip(IPlayerPawn pawn, ItemDefinition item)
     {
-        // Apply the player model defined in item.Unique to the pawn.
-        // Example: pawn.SetModel(item.Unique);
+        // Apply the player model defined in item.Model to the pawn.
+        if (string.IsNullOrEmpty(item.Model)) return;
+        pawn.SetModel(item.Model);
     }
 
     public void Unequip(IPlayerPawn pawn)
