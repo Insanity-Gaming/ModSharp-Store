@@ -12,11 +12,12 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Sharp.Shared;
+using Sharp.Shared.Listeners;
 using SqlSugar;
 
 namespace InsanityGaming.Store;
 
-public class Store : IModSharpModule
+public class Store : IModSharpModule, IGameListener
 {
     private readonly IServiceProvider _services;
     private readonly InterfaceBridge _bridge;
@@ -113,8 +114,8 @@ public class Store : IModSharpModule
         // Modules — DatabaseModule first (creates tables), then EquipmentModule, CreditsModule, StoreMenuModule
         services.AddSingleton<IModule, DatabaseModule>();
         services.AddSingleton<IModule, ExpiryCleanupService>();
-        services.AddSingleton<IModule>(sp => sp.GetRequiredService<EquipmentModule>());
         services.AddSingleton<IModule>(sp => sp.GetRequiredService<CreditsModule>());
+        services.AddSingleton<IModule>(sp => sp.GetRequiredService<EquipmentModule>());
         services.AddSingleton<IModule>(sp => sp.GetRequiredService<ItemsModule>());
         services.AddSingleton<IModule, StoreMenuModule>();
         services.AddSingleton<IModule, AdminCommandModule>();
@@ -136,6 +137,30 @@ public class Store : IModSharpModule
 
         _logger.LogInformation("Store Init");
         return true;
+    }
+
+    public void PostInit()
+    {
+        var credits = _services.GetRequiredService<CreditsModule>();
+        _bridge.ModuleManager.RegisterSharpModuleInterface<ICreditsApi>(
+            this,
+            ICreditsApi.Identity,
+            credits
+        );
+        
+        var equipment = _services.GetRequiredService<EquipmentModule>();
+        _bridge.ModuleManager.RegisterSharpModuleInterface<IEquipmentApi>(
+            this,
+            IEquipmentApi.Identity,
+            equipment
+        );
+        
+        var items =  _services.GetRequiredService<ItemsModule>();
+        _bridge.ModuleManager.RegisterSharpModuleInterface<IItemsApi>(
+            this,
+            IItemsApi.Identity,
+            items
+        );
     }
 
     public void OnLibraryConnected(string name)
@@ -202,6 +227,37 @@ public class Store : IModSharpModule
 
         }, null);
     }
+    
+    public void OnResourcePrecache()
+    {
+        var assetPath = Path.Combine(_bridge.SharpPath, "assets");
+
+        if (!Directory.Exists(assetPath))
+        {
+            return;
+        }
+
+        var files = Directory.EnumerateFiles(assetPath, "*", SearchOption.AllDirectories);
+
+        foreach (var file in files)
+        {
+            var relative = file[(assetPath.Length + 1)..].Replace("\\", "/");
+
+            if (!relative.StartsWith("particles/", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var asset = relative.EndsWith("_c", StringComparison.OrdinalIgnoreCase)
+                ? relative[..^2]
+                : relative;
+
+            _bridge.ModSharp.PrecacheResource(asset);
+
+        }
+    }
+
+    int IGameListener.ListenerVersion => IGameListener.ApiVersion;
+    int IGameListener.ListenerPriority => 0;
+
 
     // Easy access anywhere inside this class
     private StoreConfig Config => _config;
