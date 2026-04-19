@@ -1,7 +1,6 @@
 using System;
 using System.IO;
 using System.Text.Json;
-using InsanityGaming.Store.Api;
 using InsanityGaming.Store.Configs;
 using InsanityGaming.Store.Interfaces;
 using InsanityGaming.Store.Items;
@@ -103,20 +102,22 @@ public class Store : IModSharpModule
         services.AddSingleton<CreditsModule>();
         services.AddSingleton<ICredits>(sp => sp.GetRequiredService<CreditsModule>());
 
-        // API adapters — registered as concrete types so IItemsApi + IEquipmentApi can both resolve the same instance
-        services.AddSingleton<ItemsApiAdapter>();
-        services.AddSingleton<EquipmentApiAdapter>();
-        services.AddSingleton<IItemsApi>(sp => sp.GetRequiredService<ItemsApiAdapter>());
-        services.AddSingleton<IEquipmentApi>(sp => sp.GetRequiredService<EquipmentApiAdapter>());
+        // ItemsModule — same triple-registration pattern as CreditsModule
+        services.AddSingleton<ItemsModule>();
+        services.AddSingleton<IItems>(sp => sp.GetRequiredService<ItemsModule>());
 
-        // Modules — DatabaseModule first (creates tables), then EquipmentModule, CreditsModule, StoreMenuModule, ApiModule
+        // EquipmentModule — registered as concrete type so IModule + IEquipment can both resolve the same instance
+        services.AddSingleton<EquipmentModule>();
+        services.AddSingleton<IEquipment>(sp => sp.GetRequiredService<EquipmentModule>());
+
+        // Modules — DatabaseModule first (creates tables), then EquipmentModule, CreditsModule, StoreMenuModule
         services.AddSingleton<IModule, DatabaseModule>();
         services.AddSingleton<IModule, ExpiryCleanupService>();
-        services.AddSingleton<IModule, EquipmentModule>();
+        services.AddSingleton<IModule>(sp => sp.GetRequiredService<EquipmentModule>());
         services.AddSingleton<IModule>(sp => sp.GetRequiredService<CreditsModule>());
+        services.AddSingleton<IModule>(sp => sp.GetRequiredService<ItemsModule>());
         services.AddSingleton<IModule, StoreMenuModule>();
         services.AddSingleton<IModule, AdminCommandModule>();
-        services.AddSingleton<IModule, ApiModule>();
 
         _services = services.BuildServiceProvider();
 

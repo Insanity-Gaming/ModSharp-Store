@@ -1,5 +1,4 @@
 using InsanityGaming.Store.Interfaces;
-using InsanityGaming.Store.Shared;
 using Microsoft.Extensions.Logging;
 using Sharp.Modules.AdminManager.Shared;
 using Sharp.Shared;
@@ -21,16 +20,16 @@ public class AdminCommandModule : IModule
     private const string ItemsPermission          = "store:items";
 
     private readonly InterfaceBridge _bridge;
-    private readonly ICreditsApi _credits;
-    private readonly IItemsApi _items;
+    private readonly ICredits _credits;
+    private readonly IItems _items;
     private readonly ILogger<AdminCommandModule> _logger;
 
     private IModSharpModuleInterface<IAdminManager>? _adminManager;
 
     public AdminCommandModule(
         InterfaceBridge bridge,
-        ICreditsApi credits,
-        IItemsApi items,
+        ICredits credits,
+        IItems items,
         ILogger<AdminCommandModule> logger)
     {
         _bridge  = bridge;
