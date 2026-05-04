@@ -1,4 +1,5 @@
 using InsanityGaming.Store.Interfaces;
+using InsanityGaming.Store.Items;
 using InsanityGaming.Store.Models;
 using Microsoft.Extensions.Logging;
 using Sharp.Modules.AdminManager.Shared;
@@ -17,6 +18,12 @@ public class StoreMenuModule : IModule, IClientListener
     private const string MenuManagerAssemblyName  = "Sharp.Modules.MenuManager";
     private const string AdminManagerAssemblyName = "Sharp.Modules.AdminManager";
 
+    // Color palette
+    private const string ColorAccent   = "#FFB400";
+    private const string ColorPositive = "#7CFC8E";
+    private const string ColorEquipped = "#7AB8FF";
+    private const string ColorMuted    = "#9AA0A6";
+
     private readonly InterfaceBridge _bridge;
     private readonly IItemService _itemService;
     private readonly IItemType[] _itemTypes;
@@ -29,9 +36,6 @@ public class StoreMenuModule : IModule, IClientListener
 
     private IModSharpModuleInterface<IMenuManager>? _menuManager;
     private IModSharpModuleInterface<IAdminManager>? _adminManager;
-
-    // Static menus, built in Init() once item types are loaded
-    private Menu _mainMenu = null!;
 
     private sealed class PlayerMenuCache
     {
@@ -71,11 +75,10 @@ public class StoreMenuModule : IModule, IClientListener
 
     public bool Init()
     {
-        _bridge.ClientManager.InstallCommandCallback("store", OnStoreCommand);
-        _bridge.ClientManager.InstallCommandCallback("shop",  OnStoreCommand);
+        _bridge.ClientManager.InstallCommandCallback("store",       OnStoreCommand);
+        _bridge.ClientManager.InstallCommandCallback("shop",        OnStoreCommand);
+        _bridge.ClientManager.InstallCommandCallback("thirdperson", OnThirdPersonCommand);
         _bridge.ClientManager.InstallClientListener(this);
-
-        BuildStaticMenus();
 
         TryResolveMenuManager();
         TryResolveAdminManager();
@@ -86,8 +89,9 @@ public class StoreMenuModule : IModule, IClientListener
 
     public void Shutdown()
     {
-        _bridge.ClientManager.RemoveCommandCallback("store", OnStoreCommand);
-        _bridge.ClientManager.RemoveCommandCallback("shop",  OnStoreCommand);
+        _bridge.ClientManager.RemoveCommandCallback("store",       OnStoreCommand);
+        _bridge.ClientManager.RemoveCommandCallback("shop",        OnStoreCommand);
+        _bridge.ClientManager.RemoveCommandCallback("thirdperson", OnThirdPersonCommand);
         _bridge.ClientManager.RemoveClientListener(this);
     }
 
@@ -121,7 +125,7 @@ public class StoreMenuModule : IModule, IClientListener
         _pendingPurchases.Remove(client.SteamId);
     }
 
-    int IClientListener.ListenerVersion => IClientListener.ApiVersion;
+    int IClientListener.ListenerVersion  => IClientListener.ApiVersion;
     int IClientListener.ListenerPriority => 0;
 
     // -------------------------
@@ -137,9 +141,7 @@ public class StoreMenuModule : IModule, IClientListener
                               .GetOptionalSharpModuleInterface<IMenuManager>(IMenuManager.Identity);
 
         if (_menuManager?.Instance is null && logFailure)
-        {
             _logger.LogWarning("MenuManager is not installed. The store menu will not be available.");
-        }
     }
 
     private void TryResolveAdminManager()
@@ -155,9 +157,17 @@ public class StoreMenuModule : IModule, IClientListener
     // Commands
     // -------------------------
 
+    private ECommandAction OnThirdPersonCommand(IGameClient client, StringCommand cmd)
+    {
+        var svCheats = _bridge.ConVarManager.FindConVar("sv_cheats");
+        svCheats?.ReplicateToClient(client, "1");
+        client.Command("thirdperson");
+        svCheats?.ReplicateToClient(client, "0");
+        return ECommandAction.Handled;
+    }
+
     private ECommandAction OnStoreCommand(IGameClient client, StringCommand cmd)
     {
-        // Lazily resolve MenuManager if it wasn't available at Init time
         if (_menuManager?.Instance is null)
             TryResolveMenuManager();
 
@@ -174,163 +184,278 @@ public class StoreMenuModule : IModule, IClientListener
     private async Task OpenStoreAsync(IGameClient client, IMenuManager menuManager)
     {
         await RefreshCacheAsync(client);
-        menuManager.DisplayMenu(client, _mainMenu);
+        menuManager.DisplayMenu(client, BuildMainMenu(client));
     }
 
     // -------------------------
-    // Static menu construction
+    // Helpers
     // -------------------------
 
-    private void BuildStaticMenus()
+    private static string FormatTypeName(string raw) =>
+        string.Join(" ", raw.Split('_', StringSplitOptions.RemoveEmptyEntries)
+                            .Select(w => w.Length > 0 ? char.ToUpper(w[0]) + w[1..] : w));
+
+    private static string Colored(string color, string text) =>
+        $"<font color='{color}'>{text}</font>";
+
+    private static string TeamLabel(int team) => team switch
     {
-        var buyBuilder   = Menu.Create().Title("Buy Items");
-        var equipBuilder = Menu.Create().Title("Equip Items");
+        2 => "T",
+        3 => "CT",
+        _ => "Any",
+    };
+
+    private bool HasPermission(IGameClient client, string permission)
+    {
+        if (_adminManager?.Instance is null)
+            TryResolveAdminManager();
+        var steamId = new SteamID(client.SteamId);
+        return _adminManager?.Instance?.GetAdmin(steamId)?.HasPermission(permission) ?? false;
+    }
+
+    // -------------------------
+    // Main menu
+    // -------------------------
+
+    private Menu BuildMainMenu(IGameClient client)
+    {
+        var cache = GetOrCreateCache(client.SteamId);
+        var menu  = new Menu();
+
+        menu.SetTitle(
+            $"{Colored(ColorAccent, "Store")} {Colored(ColorMuted, "—")} {Colored(ColorPositive, $"{cache.Credits}cr")}");
+
+        menu.AddItem(Colored(ColorAccent, "Buy Items"),
+            ctrl => _ = NavigateAsync(ctrl, async () =>
+            {
+                await RefreshCacheAsync(ctrl.Client);
+                return BuildBuyCategoryMenu(ctrl.Client);
+            }));
+
+        menu.AddItem(Colored(ColorAccent, "Equip Items"),
+            ctrl => _ = NavigateAsync(ctrl, async () =>
+            {
+                await RefreshCacheAsync(ctrl.Client);
+                return BuildEquipCategoryMenu(ctrl.Client);
+            }));
+
+        menu.AddExitItem();
+
+        return menu;
+    }
+
+    // -------------------------
+    // Buy menus
+    // -------------------------
+
+    private Menu BuildBuyCategoryMenu(IGameClient client)
+    {
+        var menu = new Menu();
+        menu.SetTitle(Colored(ColorAccent, "Buy Items"));
 
         foreach (var type in _itemTypes)
         {
             var capturedType = type;
-
-            buyBuilder.Item(type.TypeName, controller =>
-                controller.Next(BuildBuyItemList(capturedType, controller.Client)));
-
-            equipBuilder.Item(type.TypeName, controller =>
-                controller.Next(BuildEquipItemList(capturedType, controller.Client)));
+            menu.AddItem(Colored(ColorAccent, FormatTypeName(type.TypeName)),
+                ctrl => _ = NavigateAsync(ctrl, async () =>
+                {
+                    await RefreshCacheAsync(ctrl.Client);
+                    return BuildBuyItemList(capturedType, ctrl.Client);
+                }));
         }
 
-        var buyCategories   = buyBuilder.BackItem().ExitItem().Build();
-        var equipCategories = equipBuilder.BackItem().ExitItem().Build();
+        menu.AddItem(Colored(ColorMuted, "← Back"),
+            ctrl => _ = NavigateAsync(ctrl, async () =>
+            {
+                await RefreshCacheAsync(ctrl.Client);
+                return BuildMainMenu(ctrl.Client);
+            }));
 
-        _mainMenu = Menu.Create()
-                        .Title("Store")
-                        .SubMenu("Buy Items",   buyCategories)
-                        .SubMenu("Equip Items", equipCategories)
-                        .Item("Equipped Items", controller =>
-                            controller.Next(BuildEquippedMenu(controller.Client)))
-                        .ExitItem()
-                        .Build();
-
-        _mainMenu.SetTitle(gameClient =>
-        {
-            var cache = GetOrCreateCache(gameClient.SteamId);
-            return $"Store — {cache.Credits} credits";
-        });
+        menu.AddExitItem();
+        return menu;
     }
-
-    // -------------------------
-    // Dynamic menu builders
-    // -------------------------
 
     private Menu BuildBuyItemList(IItemType type, IGameClient client)
     {
-        var menu = new Menu();
+        var cache = GetOrCreateCache(client.SteamId);
+        var menu  = new Menu();
 
-        // Title re-evaluated each render so credits stay current
-        menu.SetTitle(gameClient =>
-        {
-            var cache = GetOrCreateCache(gameClient.SteamId);
-            return $"{type.TypeName} — {cache.Credits} credits";
-        });
+        menu.SetTitle(
+            $"{Colored(ColorAccent, FormatTypeName(type.TypeName))} {Colored(ColorMuted, "—")} {Colored(ColorPositive, $"{cache.Credits}cr")}");
 
-        foreach (var item in _itemService.GetBySlot(type.Slot))
+        var sortedBuyItems = _itemService.GetBySlot(type.Slot)
+            .Where(i => !cache.OwnedUniques.Contains(i.Unique))
+            .OrderBy(i => i.Permission is null || HasPermission(client, i.Permission) ? 1 : 0)
+            .ThenByDescending(i => i.Price)
+            .ToList();
+
+        var hasItems = sortedBuyItems.Count > 0;
+        foreach (var item in sortedBuyItems)
         {
             var capturedItem = item;
 
-            menu.AddItem((IGameClient gameClient, ref MenuItemContext ctx) =>
+            var teamTag = Colored(ColorMuted, $"[{TeamLabel(item.Team)}]");
+
+            if (item.Permission is not null && !HasPermission(client, item.Permission))
             {
-                var cache = GetOrCreateCache(gameClient.SteamId);
+                var errorMsg = item.PermissionError ?? "Permission required";
+                menu.AddDisabledItem($"{capturedItem.Name} {teamTag} {Colored(ColorMuted, $"[{errorMsg}]")}");
+                continue;
+            }
 
-                if (cache.OwnedUniques.Contains(capturedItem.Unique))
-                {
-                    ctx.Title = $"{capturedItem.Name} [OWNED]";
-                    ctx.State = MenuItemState.Disabled;
-                    return;
-                }
-
-                ctx.Title  = $"{capturedItem.Name} [{capturedItem.Price}cr]";
-                ctx.Action = menuController => _ = DoBuyAsync(menuController, capturedItem);
-            });
+            menu.AddItem($"{capturedItem.Name} {teamTag} {Colored(ColorPositive, $"[{capturedItem.Price}cr]")}",
+                ctrl => ctrl.Next(BuildBuyConfirmMenu(capturedItem, type, ctrl.Client)));
         }
 
-        menu.AddBackItem();
-        menu.AddExitItem();
+        if (!hasItems)
+            menu.AddDisabledItem(Colored(ColorMuted, "All items owned"));
 
+        menu.AddItem(Colored(ColorMuted, "← Back"),
+            ctrl => _ = NavigateAsync(ctrl, async () =>
+            {
+                await RefreshCacheAsync(ctrl.Client);
+                return BuildBuyCategoryMenu(ctrl.Client);
+            }));
+
+        menu.AddExitItem();
+        return menu;
+    }
+
+    private Menu BuildBuyConfirmMenu(ItemDefinition item, IItemType type, IGameClient client)
+    {
+        var menu = new Menu();
+        menu.SetTitle(
+            $"Buy {item.Name} for {Colored(ColorPositive, $"{item.Price}cr")}?");
+
+        menu.AddItem(Colored(ColorPositive, "Confirm purchase"),
+            ctrl => _ = DoBuyAsync(ctrl, item, type));
+
+        menu.AddItem(Colored(ColorMuted, "← Back"),
+            ctrl => _ = NavigateAsync(ctrl, async () =>
+            {
+                await RefreshCacheAsync(ctrl.Client);
+                return BuildBuyItemList(type, ctrl.Client);
+            }));
+
+        menu.AddExitItem();
+        return menu;
+    }
+
+    // -------------------------
+    // Equip menus
+    // -------------------------
+
+    private Menu BuildEquipCategoryMenu(IGameClient client)
+    {
+        var cache = GetOrCreateCache(client.SteamId);
+        var menu  = new Menu();
+        menu.SetTitle(Colored(ColorAccent, "Equip Items"));
+
+        var anyOwned = false;
+        foreach (var type in _itemTypes)
+        {
+            var capturedType = type;
+            var ownsAny      = _itemService.GetBySlot(type.Slot)
+                                           .Any(it => cache.OwnedUniques.Contains(it.Unique));
+
+            if (!ownsAny)
+            {
+                menu.AddDisabledItem(
+                    $"{Colored(ColorMuted, FormatTypeName(type.TypeName))} {Colored(ColorMuted, "— none owned")}");
+                continue;
+            }
+
+            anyOwned = true;
+            menu.AddItem(Colored(ColorAccent, FormatTypeName(type.TypeName)),
+                ctrl => _ = NavigateAsync(ctrl, async () =>
+                {
+                    await RefreshCacheAsync(ctrl.Client);
+                    return BuildEquipItemList(capturedType, ctrl.Client);
+                }));
+        }
+
+        if (!anyOwned)
+            _logger.LogDebug("BuildEquipCategoryMenu: player {SteamId} owns no items", client.SteamId);
+
+        menu.AddItem(Colored(ColorMuted, "← Back"),
+            ctrl => _ = NavigateAsync(ctrl, async () =>
+            {
+                await RefreshCacheAsync(ctrl.Client);
+                return BuildMainMenu(ctrl.Client);
+            }));
+
+        menu.AddExitItem();
         return menu;
     }
 
     private Menu BuildEquipItemList(IItemType type, IGameClient client)
     {
-        var menu = new Menu();
-        menu.SetTitle(type.TypeName);
+        var cache = GetOrCreateCache(client.SteamId);
+        var menu  = new Menu();
+        menu.SetTitle(Colored(ColorAccent, FormatTypeName(type.TypeName)));
 
-        foreach (var item in _itemService.GetBySlot(type.Slot))
+        var sortedEquipItems = _itemService.GetBySlot(type.Slot)
+            .Where(i => cache.OwnedUniques.Contains(i.Unique))
+            .OrderBy(i => i.Permission is null || HasPermission(client, i.Permission) ? 1 : 0)
+            .ThenByDescending(i => i.Price)
+            .ToList();
+
+        foreach (var item in sortedEquipItems)
         {
-            var capturedItem = item;
+            var teamTag = Colored(ColorMuted, $"[{TeamLabel(item.Team)}]");
 
-            menu.AddItem((IGameClient gameClient, ref MenuItemContext ctx) =>
+            if (item.Permission is not null && !HasPermission(client, item.Permission))
             {
-                var cache = GetOrCreateCache(gameClient.SteamId);
+                var errorMsg = item.PermissionError ?? "Permission required";
+                menu.AddDisabledItem($"{item.Name} {teamTag} {Colored(ColorMuted, $"[{errorMsg}]")}");
+                continue;
+            }
 
-                if (!cache.OwnedUniques.Contains(capturedItem.Unique))
+            var capturedItem    = item;
+            var capturedType    = type;
+            var equippedEntries = cache.Equipped.Where(e => e.Unique == item.Unique).ToList();
+            var equippedTag     = equippedEntries.Count switch
+            {
+                0                                    => "",
+                1 when equippedEntries[0].Team == 2  => $" {Colored(ColorEquipped, "[T]")}",
+                1 when equippedEntries[0].Team == 3  => $" {Colored(ColorEquipped, "[CT]")}",
+                _                                    => $" {Colored(ColorEquipped, "[T+CT]")}",
+            };
+
+            menu.AddItem($"{capturedItem.Name} {teamTag}{equippedTag}",
+                ctrl => _ = NavigateAsync(ctrl, async () =>
                 {
-                    ctx.Title = capturedItem.Name;
-                    ctx.State = MenuItemState.Disabled;
-                    return;
-                }
-
-                if (cache.Equipped.Any(e => e.Unique == capturedItem.Unique))
-                {
-                    ctx.Title = $"{capturedItem.Name} [EQUIPPED]";
-                    ctx.State = MenuItemState.Disabled;
-                    return;
-                }
-
-                ctx.Title  = capturedItem.Name;
-                ctx.Action = menuController => _ = DoEquipAsync(menuController, capturedItem);
-            });
+                    await RefreshCacheAsync(ctrl.Client);
+                    return BuildEquipTeamMenu(capturedType, capturedItem, ctrl.Client);
+                }));
         }
 
-        menu.AddBackItem();
-        menu.AddExitItem();
+        menu.AddItem(Colored(ColorMuted, "← Back"),
+            ctrl => _ = NavigateAsync(ctrl, async () =>
+            {
+                await RefreshCacheAsync(ctrl.Client);
+                return BuildEquipCategoryMenu(ctrl.Client);
+            }));
 
+        menu.AddExitItem();
         return menu;
     }
 
-    private Menu BuildEquippedMenu(IGameClient client)
+    // -------------------------
+    // Navigation helper
+    // -------------------------
+
+    private static async Task NavigateAsync(IMenuController ctrl, Func<Task<Menu>> buildMenu)
     {
-        var menu  = new Menu();
-        menu.SetTitle("Equipped Items");
-
-        var cache = GetOrCreateCache(client.SteamId);
-
-        if (cache.Equipped.Count == 0)
-        {
-            menu.AddDisabledItem("Nothing equipped");
-        }
-        else
-        {
-            foreach (var equipment in cache.Equipped)
-            {
-                var capturedEquipment = equipment;
-                var definition        = _itemService.GetByUnique(equipment.Unique);
-                var typeName          = _itemTypes.FirstOrDefault(t => t.Slot == equipment.Slot)?.TypeName ?? "Unknown";
-                var displayName       = definition?.Name ?? equipment.Unique;
-
-                menu.AddItem($"{typeName}: {displayName}", menuController =>
-                    _ = DoUnequipAsync(menuController, capturedEquipment));
-            }
-        }
-
-        menu.AddBackItem();
-        menu.AddExitItem();
-
-        return menu;
+        var menu = await buildMenu();
+        ctrl.Next(menu);
     }
 
     // -------------------------
     // Buy action
     // -------------------------
 
-    private async Task DoBuyAsync(IMenuController controller, Items.ItemDefinition item)
+    private async Task DoBuyAsync(IMenuController controller, ItemDefinition item, IItemType type)
     {
         var client = controller.Client;
 
@@ -355,9 +480,9 @@ public class StoreMenuModule : IModule, IClientListener
                 return;
             }
 
-            client.Print(HudPrintChannel.Chat, $"You purchased {item.Name}!");
+            client.Print(HudPrintChannel.Chat, $"You purchased {item.Name} for {item.Price} credits!");
             await RefreshCacheAsync(client);
-            controller.Next(_mainMenu);
+            controller.Next(BuildMainMenu(client));
         }
         finally
         {
@@ -366,84 +491,189 @@ public class StoreMenuModule : IModule, IClientListener
     }
 
     // -------------------------
-    // Equip action
+    // Equip team submenu
     // -------------------------
 
-    private async Task DoEquipAsync(IMenuController controller, Items.ItemDefinition item)
+    private Menu BuildEquipTeamMenu(IItemType type, ItemDefinition item, IGameClient client)
     {
-        var client     = controller.Client;
-        var controller2 = client.GetPlayerController();
-        var pawn       = controller2?.GetPlayerPawn();
+        var cache = GetOrCreateCache(client.SteamId);
+        var menu  = new Menu();
+        menu.SetTitle($"{Colored(ColorAccent, "Equip")} {Colored(ColorMuted, "—")} {item.Name}");
 
-        // Must be alive
-        if (pawn is null || !pawn.IsAlive)
+        if (item.Team == 0 || item.Team == 2)
+            AddTeamOption(menu, type, item, 2, "Terrorists", cache);
+
+        if (item.Team == 0 || item.Team == 3)
+            AddTeamOption(menu, type, item, 3, "Counter-Terrorists", cache);
+
+        if (item.Team == 0)
         {
-            client.Print(HudPrintChannel.Chat, "You must be alive to equip items.");
-            return;
+            var equippedT  = cache.Equipped.FirstOrDefault(e => e.Unique == item.Unique && e.Team == 2);
+            var equippedCT = cache.Equipped.FirstOrDefault(e => e.Unique == item.Unique && e.Team == 3);
+
+            if (equippedT is not null && equippedCT is not null)
+            {
+                var capturedT  = equippedT;
+                var capturedCT = equippedCT;
+                menu.AddItem(
+                    $"{Colored(ColorEquipped, "Both Teams")} {Colored(ColorEquipped, "[EQUIPPED]")}",
+                    ctrl => _ = DoUnequipBothAsync(ctrl, type, item, capturedT, capturedCT));
+            }
+            else
+            {
+                menu.AddItem("Both Teams",
+                    ctrl => _ = DoEquipBothAsync(ctrl, type, item));
+            }
         }
 
-        var playerTeam = (int)controller2!.Team;
+        menu.AddItem(Colored(ColorMuted, "← Back"),
+            ctrl => _ = NavigateAsync(ctrl, async () =>
+            {
+                await RefreshCacheAsync(ctrl.Client);
+                return BuildEquipItemList(type, ctrl.Client);
+            }));
 
-        // Team restriction
-        if (item.Team != 0 && item.Team != playerTeam)
+        menu.AddExitItem();
+        return menu;
+    }
+
+    private void AddTeamOption(Menu menu, IItemType type, ItemDefinition item, int teamId, string label, PlayerMenuCache cache)
+    {
+        var equipped = cache.Equipped.FirstOrDefault(e => e.Unique == item.Unique && e.Team == teamId);
+
+        if (equipped is not null)
         {
-            client.Print(HudPrintChannel.Chat, "This item is restricted to the other team.");
-            return;
+            var capturedEquipped = equipped;
+            menu.AddItem(
+                $"{Colored(ColorEquipped, label)} {Colored(ColorEquipped, "[EQUIPPED]")}",
+                ctrl => _ = DoUnequipSingleAsync(ctrl, type, item, capturedEquipped));
         }
-
-        // Permission check
-        if (item.Permission is not null)
+        else
         {
-            // Lazily resolve AdminManager if needed
-            if (_adminManager?.Instance is null)
-                TryResolveAdminManager();
+            var capturedTeamId = teamId;
+            var capturedLabel  = label;
+            menu.AddItem(label,
+                ctrl => _ = DoEquipTeamAsync(ctrl, type, item, capturedTeamId, capturedLabel));
+        }
+    }
 
-            var steamId       = new SteamID(client.SteamId);
-            var hasPermission = _adminManager?.Instance?.GetAdmin(steamId)?.HasPermission(item.Permission) ?? false;
+    // -------------------------
+    // Equip actions
+    // -------------------------
 
-            if (!hasPermission)
+    private async Task DoEquipTeamAsync(IMenuController controller, IItemType type, ItemDefinition item, int team, string teamLabel)
+    {
+        var client = controller.Client;
+        try
+        {
+            if (item.Permission is not null && !HasPermission(client, item.Permission))
             {
                 client.Print(HudPrintChannel.Chat, "You do not have permission to equip this item.");
                 return;
             }
+
+            var success = await _equipmentManager.EquipAsync(client.SteamId, item.Unique, team);
+
+            if (!success)
+            {
+                client.Print(HudPrintChannel.Chat, $"Failed to equip {item.Name}.");
+                return;
+            }
+
+            client.Print(HudPrintChannel.Chat, $"{item.Name} equipped for {teamLabel}!");
+            await RefreshCacheAsync(client);
+            controller.Next(BuildEquipItemList(type, client));
         }
-
-        var success = await _equipmentManager.EquipAsync(client.SteamId, item.Unique, playerTeam);
-
-        if (!success)
+        catch (Exception ex)
         {
-            client.Print(HudPrintChannel.Chat, $"Failed to equip {item.Name}.");
-            return;
+            _logger.LogError(ex, "DoEquipTeamAsync failed for {SteamId} item '{Unique}' team {Team}", client.SteamId, item.Unique, team);
+            client.Print(HudPrintChannel.Chat, "An error occurred while equipping. Please try again.");
         }
+    }
 
-        client.Print(HudPrintChannel.Chat, $"{item.Name} equipped!");
-        await RefreshCacheAsync(client);
-        controller.Refresh();
+    private async Task DoEquipBothAsync(IMenuController controller, IItemType type, ItemDefinition item)
+    {
+        var client = controller.Client;
+        try
+        {
+            if (item.Permission is not null && !HasPermission(client, item.Permission))
+            {
+                client.Print(HudPrintChannel.Chat, "You do not have permission to equip this item.");
+                return;
+            }
+
+            var tSuccess  = await _equipmentManager.EquipAsync(client.SteamId, item.Unique, 2);
+            var ctSuccess = await _equipmentManager.EquipAsync(client.SteamId, item.Unique, 3);
+
+            if (!tSuccess || !ctSuccess)
+            {
+                client.Print(HudPrintChannel.Chat, $"Failed to equip {item.Name} for both teams.");
+                return;
+            }
+
+            client.Print(HudPrintChannel.Chat, $"{item.Name} equipped for both teams!");
+            await RefreshCacheAsync(client);
+            controller.Next(BuildEquipItemList(type, client));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "DoEquipBothAsync failed for {SteamId} item '{Unique}'", client.SteamId, item.Unique);
+            client.Print(HudPrintChannel.Chat, "An error occurred while equipping. Please try again.");
+        }
     }
 
     // -------------------------
-    // Unequip action
+    // Unequip actions
     // -------------------------
 
-    private async Task DoUnequipAsync(IMenuController controller, Equipment equipment)
+    private async Task DoUnequipSingleAsync(IMenuController controller, IItemType type, ItemDefinition item, Equipment equipment)
     {
         var client = controller.Client;
-
-        var success = await _equipmentManager.UnequipAsync(client.SteamId, equipment.Slot, equipment.Team);
-
-        if (!success)
+        try
         {
-            client.Print(HudPrintChannel.Chat, "Failed to unequip item.");
-            return;
+            var teamLabel = equipment.Team == 2 ? "Terrorists" : "Counter-Terrorists";
+            var success   = await _equipmentManager.UnequipAsync(client.SteamId, equipment.Slot, equipment.Team);
+
+            if (!success)
+            {
+                client.Print(HudPrintChannel.Chat, "Failed to unequip item.");
+                return;
+            }
+
+            client.Print(HudPrintChannel.Chat, $"{item.Name} unequipped from {teamLabel}.");
+            await RefreshCacheAsync(client);
+            controller.Next(BuildEquipItemList(type, client));
         }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "DoUnequipSingleAsync failed for {SteamId} item '{Unique}'", client.SteamId, item.Unique);
+            client.Print(HudPrintChannel.Chat, "An error occurred while unequipping. Please try again.");
+        }
+    }
 
-        var definition = _itemService.GetByUnique(equipment.Unique);
-        client.Print(HudPrintChannel.Chat, $"{definition?.Name ?? equipment.Unique} unequipped.");
+    private async Task DoUnequipBothAsync(IMenuController controller, IItemType type, ItemDefinition item, Equipment equippedT, Equipment equippedCT)
+    {
+        var client = controller.Client;
+        try
+        {
+            var tSuccess  = await _equipmentManager.UnequipAsync(client.SteamId, equippedT.Slot, equippedT.Team);
+            var ctSuccess = await _equipmentManager.UnequipAsync(client.SteamId, equippedCT.Slot, equippedCT.Team);
 
-        await RefreshCacheAsync(client);
+            if (!tSuccess || !ctSuccess)
+            {
+                client.Print(HudPrintChannel.Chat, "Failed to unequip item.");
+                return;
+            }
 
-        // Rebuild the equipped menu so the list reflects the new state
-        controller.Next(BuildEquippedMenu(client));
+            client.Print(HudPrintChannel.Chat, $"{item.Name} unequipped from both teams.");
+            await RefreshCacheAsync(client);
+            controller.Next(BuildEquipItemList(type, client));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "DoUnequipBothAsync failed for {SteamId} item '{Unique}'", client.SteamId, item.Unique);
+            client.Print(HudPrintChannel.Chat, "An error occurred while unequipping. Please try again.");
+        }
     }
 
     // -------------------------
@@ -468,9 +698,7 @@ public class StoreMenuModule : IModule, IClientListener
 
         var inventory = await _inventoryRepo.GetByPlayerAsync(steamId);
 
-        var equipped = playerTeam > (int)CStrikeTeam.Spectator
-            ? await _equipmentRepo.GetByPlayerAndTeamAsync(steamId, playerTeam)
-            : [];
+        var equipped = await _equipmentRepo.GetByPlayerAsync(steamId);
 
         var credits = _credits.GetCreditsBySlot(client.Slot);
 
