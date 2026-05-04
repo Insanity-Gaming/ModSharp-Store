@@ -8,6 +8,7 @@ public class ItemDefinition
     public uint Price { get; set; }
     public int Team { get; set; }
     public string? Permission { get; set; }
+    public string? PermissionError { get; set; }
     public bool Purchasable { get; set; } = true;
 }
 

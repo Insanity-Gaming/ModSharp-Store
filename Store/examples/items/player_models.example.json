@@ -2,19 +2,73 @@
   "Slot": 1,
   "Items": [
     {
-      "Unique": "characters/models/tm_leet_variantb.vmdl",
-      "Name": "Leet",
+      "Unique": "ps_earthgovsol",
+      "Name": "Earth Gov Soldier",
+      "Model": "agents/models/s2ze/earthgovsol/deadspace_earthgovsol.vmdl",
       "Price": 500,
-      "Team": 2,
+      "Team": 0,
       "Permission": null,
+      "PermissionError": null,
       "Purchasable": true
     },
     {
-      "Unique": "characters/models/ctm_sas_variantb.vmdl",
-      "Name": "SAS",
+      "Unique": "ps_hd2",
+      "Name": "HD2 Tactical",
+      "Model": "agents/models/s2ze/hd2_b01_tac/hd2_b01_tac.vmdl",
       "Price": 500,
-      "Team": 3,
+      "Team": 0,
+      "Permission": "admin:ban",
+      "PermissionError": "Admin Model",
+      "Purchasable": true
+    },
+    {
+      "Unique": "ps_isaac",
+      "Name": "Isaac Clarke",
+      "Model": "agents/models/s2ze/isaac_clarke/isaac_clarke.vmdl",
+      "Price": 500,
+      "Team": 0,
       "Permission": null,
+      "PermissionError": null,
+      "Purchasable": true
+    },
+    {
+      "Unique": "ps_masterchief",
+      "Name": "Master Chief",
+      "Model": "agents/models/s2ze/master_chief/master_chief.vmdl",
+      "Price": 500,
+      "Team": 0,
+      "Permission": null,
+      "PermissionError": null,
+      "Purchasable": true
+    },
+    {
+      "Unique": "ps_necoarc",
+      "Name": "Neco Arc",
+      "Model": "agents/models/s2ze/neco_arc/neco_arc_nohitbox.vmdl",
+      "Price": 500,
+      "Team": 0,
+      "Permission": null,
+      "PermissionError": null,
+      "Purchasable": true
+    },
+    {
+      "Unique": "ps_scavenger",
+      "Name": "Scavenger",
+      "Model": "agents/models/s2ze/scavenger/scavenger.vmdl",
+      "Price": 500,
+      "Team": 0,
+      "Permission": null,
+      "PermissionError": null,
+      "Purchasable": true
+    },
+    {
+      "Unique": "ps_tesla",
+      "Name": "Tesla Armor",
+      "Model": "agents/models/s2ze/tesla_armor/tesla_armor.vmdl",
+      "Price": 500,
+      "Team": 0,
+      "Permission": null,
+      "PermissionError": null,
       "Purchasable": true
     }
   ]
