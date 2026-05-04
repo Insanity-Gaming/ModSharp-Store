@@ -227,33 +227,6 @@ public class Store : IModSharpModule, IGameListener
 
         }, null);
     }
-    
-    public void OnResourcePrecache()
-    {
-        var assetPath = Path.Combine(_bridge.SharpPath, "assets");
-
-        if (!Directory.Exists(assetPath))
-        {
-            return;
-        }
-
-        var files = Directory.EnumerateFiles(assetPath, "*", SearchOption.AllDirectories);
-
-        foreach (var file in files)
-        {
-            var relative = file[(assetPath.Length + 1)..].Replace("\\", "/");
-
-            var asset = relative.EndsWith("_c", StringComparison.OrdinalIgnoreCase)
-                ? relative[..^2]
-                : relative;
-
-            _bridge.ModSharp.PrecacheResource(asset);
-
-        }
-    }
-
-    int IGameListener.ListenerVersion => IGameListener.ApiVersion;
-    int IGameListener.ListenerPriority => 0;
 
 
     // Easy access anywhere inside this class
