@@ -117,18 +117,15 @@ public class CreditsModule : IModule, ICredits, IClientListener
 
         _credits.Remove(slot);
 
-        Task.Run(async () =>
+        try
         {
-            try
-            {
-                await _repository.UpdateCreditsAsync(steamId, amount);
-                _logger.LogInformation("[Credits] Persisted {Credits} for {SteamId}", amount, steamId);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "[Credits] Failed to persist credits for {SteamId}", steamId);
-            }
-        });
+            _repository.UpdateCreditsAsync(steamId, amount).Wait();
+            _logger.LogInformation("[Credits] Persisted {Credits} for {SteamId}", amount, steamId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Credits] Failed to persist credits for {SteamId}", steamId);
+        }
     }
 
     int IClientListener.ListenerVersion  => IClientListener.ApiVersion;
