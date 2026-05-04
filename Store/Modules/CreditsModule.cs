@@ -1,12 +1,16 @@
-﻿using InsanityGaming.Store.Configs;
+using InsanityGaming.Store.Configs;
 using InsanityGaming.Store.Interfaces;
+using InsanityGaming.Store.Models;
 using Microsoft.Extensions.Logging;
+using Sharp.Shared.Definition;
 using Sharp.Shared.Enums;
+using Sharp.Shared.Listeners;
+using Sharp.Shared.Objects;
 using Sharp.Shared.Units;
 
 namespace InsanityGaming.Store.Modules;
 
-public class CreditsModule : IModule, ICredits
+public class CreditsModule : IModule, ICredits, IClientListener
 {
     private readonly InterfaceBridge _bridge;
     private readonly ILogger<CreditsModule> _logger;
@@ -35,6 +39,7 @@ public class CreditsModule : IModule, ICredits
     public bool Init()
     {
         _timer = _bridge.ModSharp.PushTimer(AwardCredits, _config.CreditFrequency, GameTimerFlags.Repeatable);
+        _bridge.ClientManager.InstallClientListener(this);
 
         return true;
     }
@@ -42,6 +47,17 @@ public class CreditsModule : IModule, ICredits
     public void Shutdown()
     {
         _bridge.ModSharp.StopTimer(_timer);
+
+        foreach (var c in _bridge.ClientManager.GetGameClients(true))
+        {
+            if (c.SteamId == 0) continue;
+            if (!_credits.TryGetValue(c.Slot, out var amount)) continue;
+            try { _repository.UpdateCreditsAsync(c.SteamId, amount).Wait(); }
+            catch (Exception ex) { _logger.LogError(ex, "[Credits] Shutdown persist failed for {SteamId}", c.SteamId); }
+        }
+
+        _credits.Clear();
+        _bridge.ClientManager.RemoveClientListener(this);
     }
 
     public void ConfigReload(IConfig cfg)
@@ -55,6 +71,68 @@ public class CreditsModule : IModule, ICredits
 
         _config = config;
     }
+
+    // -------------------------
+    // IClientListener
+    // -------------------------
+
+    public void OnClientConnected(IGameClient client)
+    {
+        if (client.SteamId == 0) return;
+
+        var steamId = client.SteamId;
+        var slot    = client.Slot;
+
+        Task.Run(async () =>
+        {
+            try
+            {
+                var user = await _repository.GetByIdAsync(steamId);
+                if (user is null)
+                {
+                    user = new Users { Id = steamId, Name = client.Name ?? string.Empty, Credits = 0 };
+                    await _repository.UpsertAsync(user);
+                }
+
+                _credits[slot] = user.Credits;
+                _logger.LogInformation("[Credits] Loaded {Credits} for {SteamId} (slot {Slot})",
+                    user.Credits, steamId, slot);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[Credits] Failed to load credits for {SteamId}", steamId);
+            }
+        });
+    }
+
+    public void OnClientDisconnected(IGameClient client)
+    {
+        if (client.SteamId == 0) return;
+
+        var slot    = client.Slot;
+        var steamId = client.SteamId;
+
+        if (!_credits.TryGetValue(slot, out var amount))
+            return;
+
+        _credits.Remove(slot);
+
+        Task.Run(async () =>
+        {
+            try
+            {
+                await _repository.UpdateCreditsAsync(steamId, amount);
+                _logger.LogInformation("[Credits] Persisted {Credits} for {SteamId}", amount, steamId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[Credits] Failed to persist credits for {SteamId}", steamId);
+            }
+        });
+    }
+
+    int IClientListener.ListenerVersion  => IClientListener.ApiVersion;
+    int IClientListener.ListenerPriority => 0;
 
     // -------------------------
     // Credit distribution
@@ -100,6 +178,17 @@ public class CreditsModule : IModule, ICredits
             finalReward,
             dynamicMultiplier
         );
+
+        var snapshot = _bridge.ClientManager.GetGameClients(true)
+            .Where(c => c.SteamId != 0 && _credits.ContainsKey(c.Slot))
+            .Select(c => (SteamId: (ulong)c.SteamId, Credits: _credits[c.Slot]))
+            .ToList();
+
+        _ = Task.Run((Func<Task>)(async () =>
+        {
+            try { await _repository.BulkUpdateCreditsAsync(snapshot); }
+            catch (Exception ex) { _logger.LogError(ex, "[Credits] Safety save failed"); }
+        }));
     }
 
     // -------------------------
