@@ -131,4 +131,12 @@ public sealed class InterfaceBridge
 			return File.GetLastWriteTime(Path.Combine(dllPath, "StarDance.dll"));
 		}
 	}
+
+	public string ServerAddress()
+	{
+		var ip = ModSharp.GetCommandLine("+ip") ?? "127.0.0.1";
+		var port =  ModSharp.GetCommandLine("-port") ?? "27015";
+		
+		return $"{ip}:{port}";
+	}
 }
