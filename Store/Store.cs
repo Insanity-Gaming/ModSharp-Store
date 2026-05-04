@@ -89,9 +89,14 @@ public class Store : IModSharpModule, IGameListener
 
         // Register the live config instance so modules can inject StoreConfig directly
         services.AddSingleton(_config);
+        
+        services.AddSingleton<IModule, PrecacheService>();
 
         // Item types — add one line per item type as new types are created
         services.AddSingleton<IItemType, ItemPlayerModels>();
+
+        services.AddSingleton<TargetingManagerHolder>();
+        services.AddSingleton<IModule>(sp => sp.GetRequiredService<TargetingManagerHolder>());
 
         // Item and equipment services
         services.AddSingleton<SessionItemStore>();
