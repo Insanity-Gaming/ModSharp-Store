@@ -40,7 +40,8 @@ public class StoreMenuModule : IModule, IClientListener
         public uint            Credits      { get; set; }
     }
 
-    private readonly Dictionary<ulong, PlayerMenuCache> _cache = new();
+    private readonly Dictionary<ulong, PlayerMenuCache> _cache            = new();
+    private readonly HashSet<ulong>                    _pendingPurchases  = [];
 
     public StoreMenuModule(
         InterfaceBridge bridge,
@@ -53,15 +54,15 @@ public class StoreMenuModule : IModule, IClientListener
         ICredits credits,
         ILogger<StoreMenuModule> logger)
     {
-        _bridge         = bridge;
-        _itemService    = itemService;
-        _itemTypes      = itemTypes.ToArray();
-        _purchaseService = purchaseService;
+        _bridge           = bridge;
+        _itemService      = itemService;
+        _itemTypes        = itemTypes.ToArray();
+        _purchaseService  = purchaseService;
         _equipmentManager = equipmentManager;
-        _equipmentRepo  = equipmentRepo;
-        _inventoryRepo  = inventoryRepo;
-        _credits        = credits;
-        _logger         = logger;
+        _equipmentRepo    = equipmentRepo;
+        _inventoryRepo    = inventoryRepo;
+        _credits          = credits;
+        _logger           = logger;
     }
 
     // -------------------------
@@ -117,6 +118,7 @@ public class StoreMenuModule : IModule, IClientListener
     public void OnClientDisconnected(IGameClient client)
     {
         _cache.Remove(client.SteamId);
+        _pendingPurchases.Remove(client.SteamId);
     }
 
     int IClientListener.ListenerVersion => IClientListener.ApiVersion;
@@ -332,25 +334,35 @@ public class StoreMenuModule : IModule, IClientListener
     {
         var client = controller.Client;
 
-        var result = await _purchaseService.BuyAsync(client.SteamId, client.Slot, item.Unique);
-
-        if (result != PurchaseResult.Success)
-        {
-            var message = result switch
-            {
-                PurchaseResult.InsufficientCredits => $"You need {item.Price} credits to buy {item.Name}.",
-                PurchaseResult.AlreadyOwned        => $"You already own {item.Name}.",
-                PurchaseResult.NotPurchasable      => $"{item.Name} is not for sale.",
-                _                                  => "Purchase failed. Please try again.",
-            };
-
-            client.Print(HudPrintChannel.Chat, message);
+        if (!_pendingPurchases.Add(client.SteamId))
             return;
-        }
 
-        client.Print(HudPrintChannel.Chat, $"You purchased {item.Name}!");
-        await RefreshCacheAsync(client);
-        controller.Refresh();
+        try
+        {
+            var result = await _purchaseService.BuyAsync(client.SteamId, client.Slot, item.Unique);
+
+            if (result != PurchaseResult.Success)
+            {
+                var message = result switch
+                {
+                    PurchaseResult.InsufficientCredits => $"You need {item.Price} credits to buy {item.Name}.",
+                    PurchaseResult.AlreadyOwned        => $"You already own {item.Name}.",
+                    PurchaseResult.NotPurchasable      => $"{item.Name} is not for sale.",
+                    _                                  => "Purchase failed. Please try again.",
+                };
+
+                client.Print(HudPrintChannel.Chat, message);
+                return;
+            }
+
+            client.Print(HudPrintChannel.Chat, $"You purchased {item.Name}!");
+            await RefreshCacheAsync(client);
+            controller.Next(_mainMenu);
+        }
+        finally
+        {
+            _pendingPurchases.Remove(client.SteamId);
+        }
     }
 
     // -------------------------
