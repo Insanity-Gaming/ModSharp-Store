@@ -10,6 +10,8 @@ public class ItemDefinition
     public string? Permission { get; set; }
     public string? PermissionError { get; set; }
     public bool Purchasable { get; set; } = true;
+    public string? Skin { get; set; }
+    public string? Color { get; set; }
 }
 
 public class ItemTypeConfig
