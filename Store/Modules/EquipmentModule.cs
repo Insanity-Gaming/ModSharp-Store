@@ -3,12 +3,13 @@ using InsanityGaming.Store.Interfaces;
 using InsanityGaming.Store.Services;
 using InsanityGaming.Store.Shared;
 using Microsoft.Extensions.Logging;
+using Sharp.Shared.HookParams;
 using Sharp.Shared.Listeners;
 using Sharp.Shared.Objects;
 
 namespace InsanityGaming.Store.Modules;
 
-public class EquipmentModule : IModule, IEventListener, IEquipment
+public class EquipmentModule : IModule, IEventListener, IClientListener, IEquipment
 {
     private readonly InterfaceBridge _bridge;
     private readonly Store _plugin;
@@ -40,6 +41,8 @@ public class EquipmentModule : IModule, IEventListener, IEquipment
     {
         _itemService.LoadAll();
         _bridge.EventManager.InstallEventListener(this);
+        _bridge.HookManager.PlayerSpawnPost.InstallForward(OnPlayerSpawnPost);
+        _bridge.ClientManager.InstallClientListener(this);
 
         _logger.LogInformation("EquipmentModule initialized");
         return true;
@@ -47,6 +50,8 @@ public class EquipmentModule : IModule, IEventListener, IEquipment
 
     public void Shutdown()
     {
+        _bridge.HookManager.PlayerSpawnPost.RemoveForward(OnPlayerSpawnPost);
+        _bridge.ClientManager.RemoveClientListener(this);
         _bridge.EventManager.RemoveEventListener(this);
     }
 
@@ -59,59 +64,68 @@ public class EquipmentModule : IModule, IEventListener, IEquipment
         _logger.LogInformation("Item definitions reloaded");
     }
 
-    public void FireGameEvent(IGameEvent e)
+    // -------------------------
+    // IHookManager — spawn
+    // -------------------------
+
+    private void OnPlayerSpawnPost(IPlayerSpawnForwardParams obj)
     {
-        if (e.Name.Equals("player_spawn", StringComparison.OrdinalIgnoreCase))
-            HandlePlayerSpawn(e);
-        else if (e.Name.Equals("player_disconnect", StringComparison.OrdinalIgnoreCase))
-            HandlePlayerDisconnect(e);
-    }
+        _logger.LogInformation("[Spawn] OnPlayerSpawnPost fired");
 
-    private void HandlePlayerSpawn(IGameEvent e)
-    {
-        var slot = e.GetInt("userid");
+        var pawn = obj.Pawn;
+        var controller = pawn.GetController();
+        if (controller is null)
+        {
+            _logger.LogWarning("[Spawn] pawn.GetController() returned null — skipping equipment");
+            return;
+        }
 
-        var controller = _bridge.EntityManager
-            .GetPlayerControllers()
-            .FirstOrDefault(c => (int)c.PlayerSlot == slot);
-
-        if (controller is null) return;
-
-        var pawn = controller.GetPlayerPawn();
-        if (pawn is null) return;
+        _logger.LogInformation("[Spawn] Controller resolved: slot={Slot} name={Name}", controller.PlayerSlot, controller.PlayerName);
 
         var client = _bridge.ClientManager
             .GetGameClients(true)
             .FirstOrDefault(c => c.Slot == controller.PlayerSlot);
+        if (client is null)
+        {
+            _logger.LogWarning("[Spawn] No game client found for slot={Slot} — skipping equipment", controller.PlayerSlot);
+            return;
+        }
 
-        if (client is null) return;
+        _logger.LogInformation("[Spawn] Client matched: steamId={SteamId} team={Team}", client.SteamId, (int)controller.Team);
 
         var team = (int)controller.Team;
-
         _ = _equipmentManager.ApplyEquippedItemsAsync(pawn, client.SteamId, team);
     }
 
-    private void HandlePlayerDisconnect(IGameEvent e)
+    // -------------------------
+    // IClientListener — disconnect
+    // -------------------------
+
+    public void OnClientConnected(IGameClient client)
     {
-        var slot = e.GetInt("userid");
+        _logger.LogInformation("[Client] Connected: steamId={SteamId} slot={Slot}", client.SteamId, client.Slot);
+    }
 
-        var controller = _bridge.EntityManager
-            .GetPlayerControllers()
-            .FirstOrDefault(c => (int)c.PlayerSlot == slot);
-
-        if (controller is null) return;
-
-        var client = _bridge.ClientManager
-            .GetGameClients(true)
-            .FirstOrDefault(c => c.Slot == controller.PlayerSlot);
-
-        if (client is null) return;
-
+    public void OnClientDisconnected(IGameClient client)
+    {
+        _logger.LogInformation("[Client] Disconnected: steamId={SteamId} slot={Slot}", client.SteamId, client.Slot);
         _sessionStore.Clear(client.SteamId);
     }
 
+    int IClientListener.ListenerVersion  => IClientListener.ApiVersion;
+    int IClientListener.ListenerPriority => 0;
+
     // -------------------------
-    // IEquipmentApi
+    // IEventListener — future events
+    // -------------------------
+
+    public void FireGameEvent(IGameEvent e) { }
+
+    int IEventListener.ListenerVersion => IEventListener.ApiVersion;
+    int IEventListener.ListenerPriority => 0;
+
+    // -------------------------
+    // IEquipment API
     // -------------------------
 
     public Task<bool> EquipAsync(ulong steamId, string unique, int team) =>
@@ -131,7 +145,4 @@ public class EquipmentModule : IModule, IEventListener, IEquipment
         var rows = await _equipmentRepo.GetByPlayerAndTeamAsync(steamId, team);
         return rows.Select(e => new EquippedItemDto { Unique = e.Unique, Slot = e.Slot, Team = e.Team }).ToList();
     }
-
-    int IEventListener.ListenerVersion => IEventListener.ApiVersion;
-    int IEventListener.ListenerPriority => 0;
 }
