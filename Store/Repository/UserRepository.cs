@@ -16,4 +16,30 @@ public class UserRepository : BaseRepository<Users>, IUserRepository
             .SetColumns(u => u.Credits == credits)
             .Where(u => u.Id == id)
             .ExecuteCommandAsync() > 0;
+
+    public async Task<bool> BulkUpdateCreditsAsync(IReadOnlyList<(ulong SteamId, uint Credits)> updates)
+    {
+        if (updates.Count == 0) return true;
+
+        try
+        {
+            await Db.Ado.BeginTranAsync();
+
+            foreach (var (steamId, credits) in updates)
+            {
+                await Db.Updateable<Users>()
+                    .SetColumns(u => u.Credits == credits)
+                    .Where(u => u.Id == steamId)
+                    .ExecuteCommandAsync();
+            }
+
+            await Db.Ado.CommitTranAsync();
+            return true;
+        }
+        catch
+        {
+            await Db.Ado.RollbackTranAsync();
+            return false;
+        }
+    }
 }
