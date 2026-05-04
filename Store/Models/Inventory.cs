@@ -3,12 +3,11 @@ using SqlSugar;
 namespace InsanityGaming.Store.Models;
 
 [SugarTable("user_inventory")]
-[SugarIndex("uq_store_items_name", nameof(Id), OrderByType.Asc, nameof(Unique), OrderByType.Asc, true)]
 public class Inventory
 {
     [SugarColumn(IsPrimaryKey = true)]
     public ulong Id { get; set; }
-    [SugarColumn(IsNullable = false)]
+    [SugarColumn(IsPrimaryKey = true, IsNullable = false)]
     public string Unique { get; set; } = string.Empty;
     [SugarColumn(IsNullable = true)]
     public DateTime? ExpiresAt { get; set; }
