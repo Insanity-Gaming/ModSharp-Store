@@ -17,7 +17,7 @@ using SqlSugar;
 
 namespace InsanityGaming.Store;
 
-public class Store : IModSharpModule, IGameListener
+public class Store : IModSharpModule
 {
     private readonly IServiceProvider _services;
     private readonly InterfaceBridge _bridge;
