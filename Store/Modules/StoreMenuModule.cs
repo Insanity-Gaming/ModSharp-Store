@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Sharp.Modules.AdminManager.Shared;
 using Sharp.Modules.MenuManager.Shared;
 using Sharp.Shared;
+using Sharp.Shared.Definition;
 using Sharp.Shared.Enums;
 using Sharp.Shared.Listeners;
 using Sharp.Shared.Objects;
@@ -190,6 +191,9 @@ public class StoreMenuModule : IModule, IClientListener
     // -------------------------
     // Helpers
     // -------------------------
+
+    private static string Chat(string message) =>
+        $" {ChatColor.LightRed}[IG]{ChatColor.Grey} {message}";
 
     private static string FormatTypeName(string raw) =>
         string.Join(" ", raw.Split('_', StringSplitOptions.RemoveEmptyEntries)
@@ -470,17 +474,17 @@ public class StoreMenuModule : IModule, IClientListener
             {
                 var message = result switch
                 {
-                    PurchaseResult.InsufficientCredits => $"You need {item.Price} credits to buy {item.Name}.",
-                    PurchaseResult.AlreadyOwned        => $"You already own {item.Name}.",
-                    PurchaseResult.NotPurchasable      => $"{item.Name} is not for sale.",
-                    _                                  => "Purchase failed. Please try again.",
+                    PurchaseResult.InsufficientCredits => Chat($"You need {ChatColor.Green}{item.Price} credits{ChatColor.Grey} to buy {ChatColor.Green}{item.Name}{ChatColor.Grey}."),
+                    PurchaseResult.AlreadyOwned        => Chat($"You already own {ChatColor.Green}{item.Name}{ChatColor.Grey}."),
+                    PurchaseResult.NotPurchasable      => Chat($"{ChatColor.Green}{item.Name}{ChatColor.Grey} is not for sale."),
+                    _                                  => Chat("Purchase failed. Please try again."),
                 };
 
                 client.Print(HudPrintChannel.Chat, message);
                 return;
             }
 
-            client.Print(HudPrintChannel.Chat, $"You purchased {item.Name} for {item.Price} credits!");
+            client.Print(HudPrintChannel.Chat, Chat($"You purchased {ChatColor.Green}{item.Name}{ChatColor.Grey} for {ChatColor.Green}{item.Price} credits{ChatColor.Grey}!"));
             await RefreshCacheAsync(client);
             controller.Next(BuildMainMenu(client));
         }
@@ -568,7 +572,7 @@ public class StoreMenuModule : IModule, IClientListener
         {
             if (item.Permission is not null && !HasPermission(client, item.Permission))
             {
-                client.Print(HudPrintChannel.Chat, "You do not have permission to equip this item.");
+                client.Print(HudPrintChannel.Chat, Chat("You do not have permission to equip this item."));
                 return;
             }
 
@@ -576,18 +580,18 @@ public class StoreMenuModule : IModule, IClientListener
 
             if (!success)
             {
-                client.Print(HudPrintChannel.Chat, $"Failed to equip {item.Name}.");
+                client.Print(HudPrintChannel.Chat, Chat($"Failed to equip {ChatColor.Green}{item.Name}{ChatColor.Grey}."));
                 return;
             }
 
-            client.Print(HudPrintChannel.Chat, $"{item.Name} equipped for {teamLabel}!");
+            client.Print(HudPrintChannel.Chat, Chat($"{ChatColor.Green}{item.Name}{ChatColor.Grey} equipped for {ChatColor.Green}{teamLabel}{ChatColor.Grey}!"));
             await RefreshCacheAsync(client);
             controller.Next(BuildEquipItemList(type, client));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "DoEquipTeamAsync failed for {SteamId} item '{Unique}' team {Team}", client.SteamId, item.Unique, team);
-            client.Print(HudPrintChannel.Chat, "An error occurred while equipping. Please try again.");
+            client.Print(HudPrintChannel.Chat, Chat("An error occurred while equipping. Please try again."));
         }
     }
 
@@ -598,7 +602,7 @@ public class StoreMenuModule : IModule, IClientListener
         {
             if (item.Permission is not null && !HasPermission(client, item.Permission))
             {
-                client.Print(HudPrintChannel.Chat, "You do not have permission to equip this item.");
+                client.Print(HudPrintChannel.Chat, Chat("You do not have permission to equip this item."));
                 return;
             }
 
@@ -607,18 +611,18 @@ public class StoreMenuModule : IModule, IClientListener
 
             if (!tSuccess || !ctSuccess)
             {
-                client.Print(HudPrintChannel.Chat, $"Failed to equip {item.Name} for both teams.");
+                client.Print(HudPrintChannel.Chat, Chat($"Failed to equip {ChatColor.Green}{item.Name}{ChatColor.Grey} for both teams."));
                 return;
             }
 
-            client.Print(HudPrintChannel.Chat, $"{item.Name} equipped for both teams!");
+            client.Print(HudPrintChannel.Chat, Chat($"{ChatColor.Green}{item.Name}{ChatColor.Grey} equipped for {ChatColor.Green}both teams{ChatColor.Grey}!"));
             await RefreshCacheAsync(client);
             controller.Next(BuildEquipItemList(type, client));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "DoEquipBothAsync failed for {SteamId} item '{Unique}'", client.SteamId, item.Unique);
-            client.Print(HudPrintChannel.Chat, "An error occurred while equipping. Please try again.");
+            client.Print(HudPrintChannel.Chat, Chat("An error occurred while equipping. Please try again."));
         }
     }
 
@@ -636,18 +640,18 @@ public class StoreMenuModule : IModule, IClientListener
 
             if (!success)
             {
-                client.Print(HudPrintChannel.Chat, "Failed to unequip item.");
+                client.Print(HudPrintChannel.Chat, Chat("Failed to unequip item."));
                 return;
             }
 
-            client.Print(HudPrintChannel.Chat, $"{item.Name} unequipped from {teamLabel}.");
+            client.Print(HudPrintChannel.Chat, Chat($"{ChatColor.Green}{item.Name}{ChatColor.Grey} unequipped from {ChatColor.Green}{teamLabel}{ChatColor.Grey}."));
             await RefreshCacheAsync(client);
             controller.Next(BuildEquipItemList(type, client));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "DoUnequipSingleAsync failed for {SteamId} item '{Unique}'", client.SteamId, item.Unique);
-            client.Print(HudPrintChannel.Chat, "An error occurred while unequipping. Please try again.");
+            client.Print(HudPrintChannel.Chat, Chat("An error occurred while unequipping. Please try again."));
         }
     }
 
@@ -661,18 +665,18 @@ public class StoreMenuModule : IModule, IClientListener
 
             if (!tSuccess || !ctSuccess)
             {
-                client.Print(HudPrintChannel.Chat, "Failed to unequip item.");
+                client.Print(HudPrintChannel.Chat, Chat("Failed to unequip item."));
                 return;
             }
 
-            client.Print(HudPrintChannel.Chat, $"{item.Name} unequipped from both teams.");
+            client.Print(HudPrintChannel.Chat, Chat($"{ChatColor.Green}{item.Name}{ChatColor.Grey} unequipped from {ChatColor.Green}both teams{ChatColor.Grey}."));
             await RefreshCacheAsync(client);
             controller.Next(BuildEquipItemList(type, client));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "DoUnequipBothAsync failed for {SteamId} item '{Unique}'", client.SteamId, item.Unique);
-            client.Print(HudPrintChannel.Chat, "An error occurred while unequipping. Please try again.");
+            client.Print(HudPrintChannel.Chat, Chat("An error occurred while unequipping. Please try again."));
         }
     }
 
