@@ -243,9 +243,6 @@ public class Store : IModSharpModule, IGameListener
         {
             var relative = file[(assetPath.Length + 1)..].Replace("\\", "/");
 
-            if (!relative.StartsWith("particles/", StringComparison.OrdinalIgnoreCase))
-                continue;
-
             var asset = relative.EndsWith("_c", StringComparison.OrdinalIgnoreCase)
                 ? relative[..^2]
                 : relative;
