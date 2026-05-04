@@ -22,6 +22,7 @@ public class AdminCommandModule : IModule
     private readonly InterfaceBridge _bridge;
     private readonly ICredits _credits;
     private readonly IItems _items;
+    private readonly TargetingManagerHolder _targeting;
     private readonly ILogger<AdminCommandModule> _logger;
 
     private IModSharpModuleInterface<IAdminManager>? _adminManager;
@@ -126,13 +127,13 @@ public class AdminCommandModule : IModule
 
         var success = _credits.SetCredits(steamId, amount);
         Reply(caller, success
-            ? $"Set {targetName}'s credits to {amount}."
-            : $"Failed to set credits for {targetName}.");
+            ? $"Set {ChatColor.Green}{targetName}{ChatColor.Grey}'s credits to {ChatColor.Green}{amount}{ChatColor.Grey}."
+            : $"Failed to set credits for {ChatColor.Green}{targetName}{ChatColor.Grey}.");
     }
 
     private void OnGetCreditsCommand(IGameClient? caller, StringCommand cmd)
     {
-        if (cmd.ArgCount < 2)
+        if (cmd.ArgCount < 1)
         {
             Reply(caller, "Usage: !getcredits <name|steamid>");
             return;
@@ -143,13 +144,13 @@ public class AdminCommandModule : IModule
 
         var credits = _credits.GetCredits(steamId);
         Reply(caller, credits is not null
-            ? $"{targetName} has {credits} credits."
-            : $"No record found for {targetName}.");
+            ? $"{ChatColor.Green}{targetName}{ChatColor.Grey} has {ChatColor.Green}{credits} credits{ChatColor.Grey}."
+            : $"No record found for {ChatColor.Green}{targetName}{ChatColor.Grey}.");
     }
 
     private void OnGiveItemCommand(IGameClient? caller, StringCommand cmd)
     {
-        if (cmd.ArgCount < 3)
+        if (cmd.ArgCount < 2)
         {
             Reply(caller, "Usage: !giveitem <name|steamid> <item>");
             return;
@@ -161,13 +162,13 @@ public class AdminCommandModule : IModule
         var unique = cmd.GetArg(2);
         _ = _items.GiveItemAsync(steamId, unique).ContinueWith(t =>
             Reply(caller, t.Result
-                ? $"Gave {unique} to {targetName}."
-                : $"Failed to give {unique} to {targetName} — they may already own it."));
+                ? $"Gave {ChatColor.Green}{unique}{ChatColor.Grey} to {ChatColor.Green}{targetName}{ChatColor.Grey}."
+                : $"Failed to give {ChatColor.Green}{unique}{ChatColor.Grey} to {ChatColor.Green}{targetName}{ChatColor.Grey} — they may already own it."));
     }
 
     private void OnRemoveItemCommand(IGameClient? caller, StringCommand cmd)
     {
-        if (cmd.ArgCount < 3)
+        if (cmd.ArgCount < 2)
         {
             Reply(caller, "Usage: !removeitem <name|steamid> <item>");
             return;
@@ -179,18 +180,21 @@ public class AdminCommandModule : IModule
         var unique = cmd.GetArg(2);
         _ = _items.RemoveItemAsync(steamId, unique).ContinueWith(t =>
             Reply(caller, t.Result
-                ? $"Removed {unique} from {targetName}."
-                : $"Failed to remove {unique} from {targetName} — they may not own it."));
+                ? $"Removed {ChatColor.Green}{unique}{ChatColor.Grey} from {ChatColor.Green}{targetName}{ChatColor.Grey}."
+                : $"Failed to remove {ChatColor.Green}{unique}{ChatColor.Grey} from {ChatColor.Green}{targetName}{ChatColor.Grey} — they may not own it."));
     }
 
     // -------------------------
     // Helpers
     // -------------------------
 
+    private static string Chat(string message) =>
+        $" {ChatColor.LightRed}[IG]{ChatColor.Grey} {message}";
+
     private void Reply(IGameClient? caller, string message)
     {
         if (caller is not null)
-            caller.Print(HudPrintChannel.Chat, message);
+            caller.Print(HudPrintChannel.Chat, Chat(message));
         else
             _logger.LogInformation("{Message}", message);
     }
@@ -204,6 +208,29 @@ public class AdminCommandModule : IModule
         steamId    = 0;
         targetName = string.Empty;
 
+        if (_targeting.Manager is { } manager)
+        {
+            var targets = manager.GetByTarget(caller, arg).ToList();
+
+            switch (targets.Count)
+            {
+                case 0:
+                    Reply(caller, $"No player found matching {ChatColor.Green}{arg}{ChatColor.Grey}.");
+                    return false;
+
+                case 1:
+                    steamId    = targets[0].SteamId;
+                    targetName = targets[0].Name;
+                    return true;
+
+                default:
+                    var names = string.Join(", ", targets.Select(c => c.Name));
+                    Reply(caller, $"Ambiguous match — found: {ChatColor.Green}{names}{ChatColor.Grey}.");
+                    return false;
+            }
+        }
+
+        // Fallback: SteamID or name search
         if (arg.Length == 17 && arg.All(char.IsDigit) && ulong.TryParse(arg, out var sid))
         {
             steamId    = sid;
@@ -219,7 +246,7 @@ public class AdminCommandModule : IModule
         switch (matches.Count)
         {
             case 0:
-                Reply(caller, $"No player found matching \"{arg}\".");
+                Reply(caller, $"No player found matching {ChatColor.Green}{arg}{ChatColor.Grey}.");
                 return false;
 
             case 1:
@@ -229,7 +256,7 @@ public class AdminCommandModule : IModule
 
             default:
                 var names = string.Join(", ", matches.Select(c => c.Name));
-                Reply(caller, $"Ambiguous match — found: {names}");
+                Reply(caller, $"Ambiguous match — found: {ChatColor.Green}{names}{ChatColor.Grey}.");
                 return false;
         }
     }
