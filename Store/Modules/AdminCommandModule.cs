@@ -1,8 +1,10 @@
 using InsanityGaming.Store.Interfaces;
+using InsanityGaming.Store.Services;
 using Microsoft.Extensions.Logging;
 using Sharp.Modules.AdminManager.Shared;
 using Sharp.Shared;
 using Sharp.Shared.Abstractions;
+using Sharp.Shared.Definition;
 using Sharp.Shared.Enums;
 using Sharp.Shared.Objects;
 using Sharp.Shared.Types;
@@ -31,12 +33,14 @@ public class AdminCommandModule : IModule
         InterfaceBridge bridge,
         ICredits credits,
         IItems items,
+        TargetingManagerHolder targeting,
         ILogger<AdminCommandModule> logger)
     {
-        _bridge  = bridge;
-        _credits = credits;
-        _items   = items;
-        _logger  = logger;
+        _bridge    = bridge;
+        _credits   = credits;
+        _items     = items;
+        _targeting = targeting;
+        _logger    = logger;
     }
 
     public bool Init() => true;
@@ -50,8 +54,6 @@ public class AdminCommandModule : IModule
         if (name == AdminManagerAssemblyName)
             TryResolveAdminManager();
     }
-
-    public void OnLibraryDisconnect(string name) { }
 
     public void OnAllModulesLoaded()
     {
@@ -87,7 +89,7 @@ public class AdminCommandModule : IModule
 
     private void OnAddCreditsCommand(IGameClient? caller, StringCommand cmd)
     {
-        if (cmd.ArgCount < 3)
+        if (cmd.ArgCount < 2)
         {
             Reply(caller, "Usage: !addcredits <name|steamid> <amount>");
             return;
@@ -104,13 +106,13 @@ public class AdminCommandModule : IModule
 
         var success = _credits.AddCredits(steamId, amount);
         Reply(caller, success
-            ? $"Added {amount} credits to {targetName}."
-            : $"Failed to add credits to {targetName}.");
+            ? $"Added {ChatColor.Green}{amount} credits{ChatColor.Grey} to {ChatColor.Green}{targetName}{ChatColor.Grey}."
+            : $"Failed to add credits to {ChatColor.Green}{targetName}{ChatColor.Grey}.");
     }
 
     private void OnSetCreditsCommand(IGameClient? caller, StringCommand cmd)
     {
-        if (cmd.ArgCount < 3)
+        if (cmd.ArgCount < 2)
         {
             Reply(caller, "Usage: !setcredits <name|steamid> <amount>");
             return;
