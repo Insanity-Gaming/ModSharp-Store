@@ -11,5 +11,12 @@
   "DbPassword": "",
   "EnabledItems": [
     "player_models"
-  ]
+  ],
+  "FlagMultipliers": {
+    "admin:vip":2.0,
+    "admin:vip2":3.0,
+    "admin:vip3":4.0,
+    "admin:vip4":5.0,
+    "admin:ban": 2.0
+  }
 }
