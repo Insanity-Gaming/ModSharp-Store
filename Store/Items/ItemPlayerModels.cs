@@ -42,9 +42,15 @@ public class ItemPlayerModels : IItemType
             if (item.Skin is not null)
                 pawn.AcceptInput("Skin", pawn, pawn, item.Skin);
 
-            if (item.Color is not null && TryParseColor(item.Color, out var color))
+            if (item.Color is null) return;
+
+            if (TryParseColor(item.Color, out var color))
                 pawn.RenderColor = color;
-            else if (item.Color is not null && item.Color.Equals("team", StringComparison.InvariantCultureIgnoreCase))
+            else if(item.Color.Equals("random",  StringComparison.InvariantCultureIgnoreCase))
+            {
+                var random = new Random();
+                pawn.RenderColor = new Color32((byte) random.Next(0, 255), (byte) random.Next(0, 255), (byte) random.Next(0, 255), 254);
+            }else if (item.Color.Equals("team", StringComparison.InvariantCultureIgnoreCase))
             {
                 switch (pawn.Team)
                 {
@@ -72,7 +78,7 @@ public class ItemPlayerModels : IItemType
             return false;
 
         var a = parts.Length >= 4 && byte.TryParse(parts[3], out var parsed) ? parsed : (byte)255;
-        color = new Color32(r, g, b, a);
+        color = new Color32(r, g, b, 254);
         return true;
     }
 
