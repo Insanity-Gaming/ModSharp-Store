@@ -79,7 +79,6 @@ public class StoreMenuModule : IModule, IClientListener
     {
         _bridge.ClientManager.InstallCommandCallback("store",       OnStoreCommand);
         _bridge.ClientManager.InstallCommandCallback("shop",        OnStoreCommand);
-        _bridge.ClientManager.InstallCommandCallback("thirdperson", OnThirdPersonCommand);
         _bridge.ClientManager.InstallClientListener(this);
 
         TryResolveMenuManager();
@@ -92,7 +91,6 @@ public class StoreMenuModule : IModule, IClientListener
     {
         _bridge.ClientManager.RemoveCommandCallback("store",       OnStoreCommand);
         _bridge.ClientManager.RemoveCommandCallback("shop",        OnStoreCommand);
-        _bridge.ClientManager.RemoveCommandCallback("thirdperson", OnThirdPersonCommand);
         _bridge.ClientManager.RemoveClientListener(this);
     }
 
@@ -145,16 +143,6 @@ public class StoreMenuModule : IModule, IClientListener
     // -------------------------
     // Commands
     // -------------------------
-
-    private ECommandAction OnThirdPersonCommand(IGameClient client, StringCommand cmd)
-    {
-        var svCheats = _bridge.ConVarManager.FindConVar("sv_cheats");
-        svCheats?.ReplicateToClient(client, "1");
-        client.Command("thirdperson");
-        svCheats?.ReplicateToClient(client, "0");
-        return ECommandAction.Handled;
-    }
-
     private ECommandAction OnStoreCommand(IGameClient client, StringCommand cmd)
     {
         if (_menuManager?.Instance is null)
