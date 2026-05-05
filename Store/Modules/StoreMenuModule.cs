@@ -117,7 +117,7 @@ public class StoreMenuModule : IModule, IClientListener
 
     public void OnClientConnected(IGameClient client) { }
 
-    public void OnClientDisconnected(IGameClient client)
+    public void OnClientDisconnected(IGameClient client, NetworkDisconnectionReason reason)
     {
         _cache.Remove(client.SteamId);
         _pendingPurchases.Remove(client.SteamId);
