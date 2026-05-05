@@ -3,6 +3,7 @@ using InsanityGaming.Store.Interfaces;
 using InsanityGaming.Store.Services;
 using InsanityGaming.Store.Shared;
 using Microsoft.Extensions.Logging;
+using Sharp.Shared.Enums;
 using Sharp.Shared.HookParams;
 using Sharp.Shared.Listeners;
 using Sharp.Shared.Objects;
@@ -106,7 +107,7 @@ public class EquipmentModule : IModule, IEventListener, IClientListener, IEquipm
         _logger.LogInformation("[Client] Connected: steamId={SteamId} slot={Slot}", client.SteamId, client.Slot);
     }
 
-    public void OnClientDisconnected(IGameClient client)
+    public void OnClientDisconnected(IGameClient client, NetworkDisconnectionReason reason)
     {
         _logger.LogInformation("[Client] Disconnected: steamId={SteamId} slot={Slot}", client.SteamId, client.Slot);
         _sessionStore.Clear(client.SteamId);

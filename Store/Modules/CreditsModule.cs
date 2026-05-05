@@ -123,17 +123,16 @@ public class CreditsModule : IModule, ICredits, IClientListener
         });
     }
 
-    public void OnClientDisconnected(IGameClient client)
+    public void OnClientDisconnected(IGameClient client, NetworkDisconnectionReason reason)
     {
-        if (client.SteamId == 0) return;
-
         var slot    = client.Slot;
-        var steamId = client.SteamId;
-
-        if (!_credits.TryGetValue(slot, out var amount))
+        if (!_credits.Remove(slot, out var amount))
             return;
 
-        _credits.Remove(slot);
+        if (client.SteamId == 0) return;
+
+        
+        var steamId = client.SteamId;
 
         try
         {
