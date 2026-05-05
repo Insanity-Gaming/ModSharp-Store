@@ -98,6 +98,9 @@ public class Store : IModSharpModule
         services.AddSingleton<TargetingManagerHolder>();
         services.AddSingleton<IModule>(sp => sp.GetRequiredService<TargetingManagerHolder>());
 
+        services.AddSingleton<AdminManagerHolder>();
+        services.AddSingleton<IModule>(sp => sp.GetRequiredService<AdminManagerHolder>());
+
         // Item and equipment services
         services.AddSingleton<SessionItemStore>();
         services.AddSingleton<IItemService, ItemService>();

@@ -1,8 +1,8 @@
 using InsanityGaming.Store.Interfaces;
 using InsanityGaming.Store.Items;
 using InsanityGaming.Store.Models;
+using InsanityGaming.Store.Services;
 using Microsoft.Extensions.Logging;
-using Sharp.Modules.AdminManager.Shared;
 using Sharp.Modules.MenuManager.Shared;
 using Sharp.Shared;
 using Sharp.Shared.Definition;
@@ -16,8 +16,7 @@ namespace InsanityGaming.Store.Modules;
 
 public class StoreMenuModule : IModule, IClientListener
 {
-    private const string MenuManagerAssemblyName  = "Sharp.Modules.MenuManager";
-    private const string AdminManagerAssemblyName = "Sharp.Modules.AdminManager";
+    private const string MenuManagerAssemblyName = "Sharp.Modules.MenuManager";
 
     // Color palette
     private const string ColorAccent   = "#FFB400";
@@ -33,10 +32,10 @@ public class StoreMenuModule : IModule, IClientListener
     private readonly IEquipmentRepository _equipmentRepo;
     private readonly IInventoryRepository _inventoryRepo;
     private readonly ICredits _credits;
+    private readonly AdminManagerHolder _adminManager;
     private readonly ILogger<StoreMenuModule> _logger;
 
     private IModSharpModuleInterface<IMenuManager>? _menuManager;
-    private IModSharpModuleInterface<IAdminManager>? _adminManager;
 
     private sealed class PlayerMenuCache
     {
@@ -57,7 +56,8 @@ public class StoreMenuModule : IModule, IClientListener
         IEquipmentRepository equipmentRepo,
         IInventoryRepository inventoryRepo,
         ICredits credits,
-        ILogger<StoreMenuModule> logger)
+        ILogger<StoreMenuModule> logger,
+        AdminManagerHolder adminManager)
     {
         _bridge           = bridge;
         _itemService      = itemService;
@@ -68,6 +68,7 @@ public class StoreMenuModule : IModule, IClientListener
         _inventoryRepo    = inventoryRepo;
         _credits          = credits;
         _logger           = logger;
+        _adminManager = adminManager;
     }
 
     // -------------------------
@@ -82,7 +83,6 @@ public class StoreMenuModule : IModule, IClientListener
         _bridge.ClientManager.InstallClientListener(this);
 
         TryResolveMenuManager();
-        TryResolveAdminManager();
 
         _logger.LogInformation("StoreMenuModule initialized");
         return true;
@@ -102,8 +102,6 @@ public class StoreMenuModule : IModule, IClientListener
     {
         if (name.Equals(MenuManagerAssemblyName, StringComparison.OrdinalIgnoreCase))
             TryResolveMenuManager();
-        else if (name.Equals(AdminManagerAssemblyName, StringComparison.OrdinalIgnoreCase))
-            TryResolveAdminManager();
     }
 
     public void OnLibraryDisconnect(string name) { }
@@ -111,7 +109,6 @@ public class StoreMenuModule : IModule, IClientListener
     public void OnAllModulesLoaded()
     {
         TryResolveMenuManager(logFailure: true);
-        TryResolveAdminManager();
     }
 
     // -------------------------
@@ -143,15 +140,6 @@ public class StoreMenuModule : IModule, IClientListener
 
         if (_menuManager?.Instance is null && logFailure)
             _logger.LogWarning("MenuManager is not installed. The store menu will not be available.");
-    }
-
-    private void TryResolveAdminManager()
-    {
-        if (_adminManager?.Instance is not null)
-            return;
-
-        _adminManager = _bridge.ModuleManager
-                               .GetOptionalSharpModuleInterface<IAdminManager>(IAdminManager.Identity);
     }
 
     // -------------------------
@@ -211,10 +199,10 @@ public class StoreMenuModule : IModule, IClientListener
 
     private bool HasPermission(IGameClient client, string permission)
     {
-        if (_adminManager?.Instance is null)
-            TryResolveAdminManager();
+        if (_adminManager.Manager is null)
+            return false;
         var steamId = new SteamID(client.SteamId);
-        return _adminManager?.Instance?.GetAdmin(steamId)?.HasPermission(permission) ?? false;
+        return _adminManager?.Manager?.GetAdmin(steamId)?.HasPermission(permission) ?? false;
     }
 
     // -------------------------

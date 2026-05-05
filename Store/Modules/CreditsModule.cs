@@ -1,6 +1,7 @@
 using InsanityGaming.Store.Configs;
 using InsanityGaming.Store.Interfaces;
 using InsanityGaming.Store.Models;
+using InsanityGaming.Store.Services;
 using Microsoft.Extensions.Logging;
 using Sharp.Shared.Definition;
 using Sharp.Shared.Enums;
@@ -15,6 +16,7 @@ public class CreditsModule : IModule, ICredits, IClientListener
     private readonly InterfaceBridge _bridge;
     private readonly ILogger<CreditsModule> _logger;
     private readonly IUserRepository _repository;
+    private readonly AdminManagerHolder _adminManager;
     private readonly Store _plugin;
     private StoreConfig _config;
 
@@ -27,13 +29,15 @@ public class CreditsModule : IModule, ICredits, IClientListener
         Store plugin,
         StoreConfig config,
         ILogger<CreditsModule> logger,
-        IUserRepository repository)
+        IUserRepository repository,
+        AdminManagerHolder adminManager)
     {
-        _plugin = plugin;
-        _config = config;
-        _bridge = bridge;
-        _logger = logger;
-        _repository = repository;
+        _plugin       = plugin;
+        _config       = config;
+        _bridge       = bridge;
+        _logger       = logger;
+        _repository   = repository;
+        _adminManager = adminManager;
     }
 
     public bool Init()
