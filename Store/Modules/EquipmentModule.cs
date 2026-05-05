@@ -120,7 +120,9 @@ public class EquipmentModule : IModule, IEventListener, IClientListener, IEquipm
     // IEventListener — future events
     // -------------------------
 
-    public void FireGameEvent(IGameEvent e) { }
+    public void FireGameEvent(IGameEvent e)
+    {
+    }
 
     int IEventListener.ListenerVersion => IEventListener.ApiVersion;
     int IEventListener.ListenerPriority => 0;

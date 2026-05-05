@@ -10,7 +10,7 @@ using Sharp.Shared.Units;
 
 namespace InsanityGaming.Store.Modules;
 
-public class CreditsModule : IModule, ICredits, IClientListener
+public class CreditsModule : IModule, ICredits, IClientListener, IEventListener
 {
     private readonly InterfaceBridge _bridge;
     private readonly ILogger<CreditsModule> _logger;
@@ -20,6 +20,7 @@ public class CreditsModule : IModule, ICredits, IClientListener
     private StoreConfig _config;
 
     private readonly Dictionary<PlayerSlot, uint> _credits = new();
+    private readonly Dictionary<ulong, int> _connectRetries = new();
 
     private Guid _timer;
 
@@ -43,6 +44,8 @@ public class CreditsModule : IModule, ICredits, IClientListener
     {
         _timer = _bridge.ModSharp.PushTimer(AwardCredits, _config.CreditFrequency, GameTimerFlags.Repeatable);
         _bridge.ClientManager.InstallClientListener(this);
+        _bridge.EventManager.HookEvent("player_connect_full");
+        _bridge.EventManager.InstallEventListener(this);
         return true;
     }
 
@@ -75,6 +78,7 @@ public class CreditsModule : IModule, ICredits, IClientListener
         }
 
         _credits.Clear();
+        _bridge.EventManager.RemoveEventListener(this);
         _bridge.ClientManager.RemoveClientListener(this);
     }
 
@@ -94,13 +98,101 @@ public class CreditsModule : IModule, ICredits, IClientListener
     // IClientListener
     // -------------------------
 
-    public void OnClientConnected(IGameClient client)
+    public void OnClientPostAdminCheck(IGameClient client) { }
+
+    public void OnClientDisconnected(IGameClient client, NetworkDisconnectionReason reason)
     {
+        _connectRetries.Remove(client.SteamId);
+
+        var slot    = client.Slot;
+        if (!_credits.Remove(slot, out var amount))
+            return;
+
         if (client.SteamId == 0) return;
 
         var steamId = client.SteamId;
-        var slot    = client.Slot;
 
+        try
+        {
+            _repository.UpdateCreditsAsync(steamId, amount);
+            _logger.LogInformation("[Credits] Persisted {Credits} for {SteamId}", amount, steamId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "[Credits] Failed to persist credits for {SteamId}", steamId);
+        }
+    }
+
+    int IClientListener.ListenerVersion  => IClientListener.ApiVersion;
+    int IClientListener.ListenerPriority => 0;
+
+    // -------------------------
+    // IEventListener
+    // -------------------------
+
+    public void FireGameEvent(IGameEvent e)
+    {
+        if (e.Name != "player_connect_full") return;
+
+        var controller = e.GetPlayerController("userid");
+        if (controller is null) return;
+
+        var client = _bridge.ClientManager
+            .GetGameClients(true)
+            .FirstOrDefault(c => c.Slot == controller.PlayerSlot);
+
+        if (client is null || client.SteamId == 0) return;
+
+        if (controller.ConnectedState != PlayerConnectedState.PlayerConnected)
+        {
+            ScheduleConnectRetry(client.SteamId);
+            return;
+        }
+
+        LoadCredits(client.SteamId, client.Slot, client.Name);
+    }
+
+    private void ScheduleConnectRetry(ulong steamId)
+    {
+        var attempt = _connectRetries.GetValueOrDefault(steamId, 0) + 1;
+
+        if (attempt > 3)
+        {
+            _connectRetries.Remove(steamId);
+            _logger.LogWarning("[Credits] Giving up waiting for PlayerConnected state for {SteamId} after 3 retries", steamId);
+            return;
+        }
+
+        _connectRetries[steamId] = attempt;
+        _logger.LogInformation("[Credits] ConnectedState not ready for {SteamId}, scheduling retry {Attempt}/3", steamId, attempt);
+        _bridge.ModSharp.PushTimer(() => RetryLoadCredits(steamId), 5.0f, GameTimerFlags.None);
+    }
+
+    private void RetryLoadCredits(ulong steamId)
+    {
+        var client = _bridge.ClientManager
+            .GetGameClients(true)
+            .FirstOrDefault(c => c.SteamId == steamId);
+
+        if (client is null)
+        {
+            _connectRetries.Remove(steamId);
+            return;
+        }
+
+        var controller = client.GetPlayerController();
+        if (controller?.ConnectedState != PlayerConnectedState.PlayerConnected)
+        {
+            ScheduleConnectRetry(steamId);
+            return;
+        }
+
+        _connectRetries.Remove(steamId);
+        LoadCredits(client.SteamId, client.Slot, client.Name);
+    }
+
+    private void LoadCredits(ulong steamId, PlayerSlot slot, string? name)
+    {
         Task.Run(async () =>
         {
             try
@@ -108,7 +200,7 @@ public class CreditsModule : IModule, ICredits, IClientListener
                 var user = await _repository.GetByIdAsync(steamId);
                 if (user is null)
                 {
-                    user = new Users { Id = steamId, Name = client.Name ?? string.Empty, Credits = 0 };
+                    user = new Users { Id = steamId, Name = name ?? string.Empty, Credits = 0 };
                     await _repository.UpsertAsync(user);
                 }
 
@@ -123,30 +215,8 @@ public class CreditsModule : IModule, ICredits, IClientListener
         });
     }
 
-    public void OnClientDisconnected(IGameClient client, NetworkDisconnectionReason reason)
-    {
-        var slot    = client.Slot;
-        if (!_credits.Remove(slot, out var amount))
-            return;
-
-        if (client.SteamId == 0) return;
-
-        
-        var steamId = client.SteamId;
-
-        try
-        {
-            _repository.UpdateCreditsAsync(steamId, amount).Wait();
-            _logger.LogInformation("[Credits] Persisted {Credits} for {SteamId}", amount, steamId);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "[Credits] Failed to persist credits for {SteamId}", steamId);
-        }
-    }
-
-    int IClientListener.ListenerVersion  => IClientListener.ApiVersion;
-    int IClientListener.ListenerPriority => 0;
+    int IEventListener.ListenerVersion  => IEventListener.ApiVersion;
+    int IEventListener.ListenerPriority => 0;
 
     // -------------------------
     // Credit distribution
@@ -158,7 +228,7 @@ public class CreditsModule : IModule, ICredits, IClientListener
 
         var players = _bridge.EntityManager
             .GetPlayerControllers()
-            .Where(c => c is { Team: > CStrikeTeam.Spectator, IsFakeClient: false })
+            .Where(c => c is { Team: > CStrikeTeam.Spectator, IsFakeClient: false, ConnectedState: PlayerConnectedState.PlayerConnected })
             .ToList();
 
         var count = players.Count;
