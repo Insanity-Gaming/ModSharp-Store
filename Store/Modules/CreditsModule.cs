@@ -1,4 +1,4 @@
-using InsanityGaming.Store.Configs;
+﻿using InsanityGaming.Store.Configs;
 using InsanityGaming.Store.Interfaces;
 using InsanityGaming.Store.Models;
 using InsanityGaming.Store.Services;
@@ -115,7 +115,7 @@ public class CreditsModule : IModule, ICredits, IClientListener, IEventListener
         try
         {
             _repository.UpdateCreditsAsync(steamId, amount);
-            _logger.LogInformation("[Credits] Persisted {Credits} for {SteamId}", amount, steamId);
+            _logger.LogDebug("[Credits] Persisted {Credits} for {SteamId}", amount, steamId);
         }
         catch (Exception ex)
         {
@@ -159,12 +159,12 @@ public class CreditsModule : IModule, ICredits, IClientListener, IEventListener
         if (attempt > 3)
         {
             _connectRetries.Remove(steamId);
-            _logger.LogWarning("[Credits] Giving up waiting for PlayerConnected state for {SteamId} after 3 retries", steamId);
+            _logger.LogDebug("[Credits] Giving up waiting for PlayerConnected state for {SteamId} after 3 retries", steamId);
             return;
         }
 
         _connectRetries[steamId] = attempt;
-        _logger.LogInformation("[Credits] ConnectedState not ready for {SteamId}, scheduling retry {Attempt}/3", steamId, attempt);
+        _logger.LogDebug("[Credits] ConnectedState not ready for {SteamId}, scheduling retry {Attempt}/3", steamId, attempt);
         _bridge.ModSharp.PushTimer(() => RetryLoadCredits(steamId), 5.0f, GameTimerFlags.None);
     }
 
@@ -205,7 +205,7 @@ public class CreditsModule : IModule, ICredits, IClientListener, IEventListener
                 }
 
                 _credits[slot] = user.Credits;
-                _logger.LogInformation("[Credits] Loaded {Credits} for {SteamId} (slot {Slot})",
+                _logger.LogDebug("[Credits] Loaded {Credits} for {SteamId} (slot {Slot})",
                     user.Credits, steamId, slot);
             }
             catch (Exception ex)
@@ -254,10 +254,10 @@ public class CreditsModule : IModule, ICredits, IClientListener, IEventListener
             var reward         = (uint)(basePoints * dynamicMultiplier * flagMultiplier);
 
             if (!AddCreditsBySlot(controller.PlayerSlot, (int)reward))
-                _logger.LogWarning("Failed to award credits to slot {Slot}", controller.PlayerSlot);
+                _logger.LogDebug("Failed to award credits to slot {Slot}", controller.PlayerSlot);
         }
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "Credits tick | Players: {Count}/{Max} ({Percent:P0}) | Base: {Base} | DynMult: {Mult:F2}",
             count,
             maxPlayers,

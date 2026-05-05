@@ -46,7 +46,7 @@ public class PrecacheService : IModule, IGameListener
                 ? relative[..^2]
                 : relative;
 
-            _logger.LogInformation("Preaching asset \"{0}\"", asset);
+            _logger.LogDebug("Preaching asset \"{0}\"", asset);
             _bridge.ModSharp.PrecacheResource(asset);
 
         }

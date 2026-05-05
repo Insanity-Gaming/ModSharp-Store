@@ -1,4 +1,4 @@
-using InsanityGaming.Store.Interfaces;
+﻿using InsanityGaming.Store.Interfaces;
 using InsanityGaming.Store.Items;
 using InsanityGaming.Store.Models;
 using InsanityGaming.Store.Services;
@@ -83,7 +83,7 @@ public class StoreMenuModule : IModule, IClientListener
 
         TryResolveMenuManager();
 
-        _logger.LogInformation("StoreMenuModule initialized");
+        _logger.LogDebug("StoreMenuModule initialized");
         return true;
     }
 
@@ -137,7 +137,7 @@ public class StoreMenuModule : IModule, IClientListener
                               .GetOptionalSharpModuleInterface<IMenuManager>(IMenuManager.Identity);
 
         if (_menuManager?.Instance is null && logFailure)
-            _logger.LogWarning("MenuManager is not installed. The store menu will not be available.");
+            _logger.LogDebug("MenuManager is not installed. The store menu will not be available.");
     }
 
     // -------------------------
@@ -150,7 +150,7 @@ public class StoreMenuModule : IModule, IClientListener
 
         if (_menuManager?.Instance is not { } menuManager)
         {
-            _logger.LogWarning("OnStoreCommand: MenuManager is not available");
+            _logger.LogDebug("OnStoreCommand: MenuManager is not available");
             return ECommandAction.Handled;
         }
 

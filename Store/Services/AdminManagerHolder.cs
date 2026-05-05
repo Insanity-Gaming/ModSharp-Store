@@ -1,4 +1,4 @@
-using InsanityGaming.Store.Interfaces;
+﻿using InsanityGaming.Store.Interfaces;
 using Microsoft.Extensions.Logging;
 using Sharp.Modules.AdminManager.Shared;
 using Sharp.Shared;
@@ -31,7 +31,7 @@ public sealed class AdminManagerHolder : IModule
             .GetOptionalSharpModuleInterface<IAdminManager>(IAdminManager.Identity);
 
         if (_adminManager?.Instance is null && logFailure)
-            _logger.LogWarning("AdminManager is not installed. Flag multipliers and permission checks will be skipped.");
+            _logger.LogDebug("AdminManager is not installed. Flag multipliers and permission checks will be skipped.");
     }
 
     public bool IsConnected() => _adminManager?.Instance is not null;

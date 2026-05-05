@@ -1,4 +1,4 @@
-using InsanityGaming.Store.Configs;
+﻿using InsanityGaming.Store.Configs;
 using InsanityGaming.Store.Interfaces;
 using InsanityGaming.Store.Services;
 using InsanityGaming.Store.Shared;
@@ -45,7 +45,7 @@ public class EquipmentModule : IModule, IEventListener, IClientListener, IEquipm
         _bridge.HookManager.PlayerSpawnPost.InstallForward(OnPlayerSpawnPost);
         _bridge.ClientManager.InstallClientListener(this);
 
-        _logger.LogInformation("EquipmentModule initialized");
+        _logger.LogDebug("EquipmentModule initialized");
         return true;
     }
 
@@ -62,7 +62,7 @@ public class EquipmentModule : IModule, IEventListener, IClientListener, IEquipm
             return;
 
         _itemService.LoadAll();
-        _logger.LogInformation("Item definitions reloaded");
+        _logger.LogDebug("Item definitions reloaded");
     }
 
     // -------------------------
@@ -71,28 +71,28 @@ public class EquipmentModule : IModule, IEventListener, IClientListener, IEquipm
 
     private void OnPlayerSpawnPost(IPlayerSpawnForwardParams obj)
     {
-        _logger.LogInformation("[Spawn] OnPlayerSpawnPost fired");
+        _logger.LogDebug("[Spawn] OnPlayerSpawnPost fired");
 
         var pawn = obj.Pawn;
         var controller = pawn.GetController();
         if (controller is null)
         {
-            _logger.LogWarning("[Spawn] pawn.GetController() returned null — skipping equipment");
+            _logger.LogDebug("[Spawn] pawn.GetController() returned null — skipping equipment");
             return;
         }
 
-        _logger.LogInformation("[Spawn] Controller resolved: slot={Slot} name={Name}", controller.PlayerSlot, controller.PlayerName);
+        _logger.LogDebug("[Spawn] Controller resolved: slot={Slot} name={Name}", controller.PlayerSlot, controller.PlayerName);
 
         var client = _bridge.ClientManager
             .GetGameClients(true)
             .FirstOrDefault(c => c.Slot == controller.PlayerSlot);
         if (client is null)
         {
-            _logger.LogWarning("[Spawn] No game client found for slot={Slot} — skipping equipment", controller.PlayerSlot);
+            _logger.LogDebug("[Spawn] No game client found for slot={Slot} — skipping equipment", controller.PlayerSlot);
             return;
         }
 
-        _logger.LogInformation("[Spawn] Client matched: steamId={SteamId} team={Team}", client.SteamId, (int)controller.Team);
+        _logger.LogDebug("[Spawn] Client matched: steamId={SteamId} team={Team}", client.SteamId, (int)controller.Team);
 
         var team = (int)controller.Team;
         _ = _equipmentManager.ApplyEquippedItemsAsync(pawn, client.SteamId, team);
@@ -104,12 +104,12 @@ public class EquipmentModule : IModule, IEventListener, IClientListener, IEquipm
 
     public void OnClientConnected(IGameClient client)
     {
-        _logger.LogInformation("[Client] Connected: steamId={SteamId} slot={Slot}", client.SteamId, client.Slot);
+        _logger.LogDebug("[Client] Connected: steamId={SteamId} slot={Slot}", client.SteamId, client.Slot);
     }
 
     public void OnClientDisconnected(IGameClient client, NetworkDisconnectionReason reason)
     {
-        _logger.LogInformation("[Client] Disconnected: steamId={SteamId} slot={Slot}", client.SteamId, client.Slot);
+        _logger.LogDebug("[Client] Disconnected: steamId={SteamId} slot={Slot}", client.SteamId, client.Slot);
         _sessionStore.Clear(client.SteamId);
     }
 

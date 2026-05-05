@@ -1,4 +1,4 @@
-using InsanityGaming.Store.Interfaces;
+﻿using InsanityGaming.Store.Interfaces;
 using InsanityGaming.Store.Services;
 using Microsoft.Extensions.Logging;
 using Sharp.Modules.AdminManager.Shared;
@@ -61,7 +61,7 @@ public class AdminCommandModule : IModule
 
         if (_adminManager?.Instance is not { } adminManager)
         {
-            _logger.LogWarning("AdminManager not available — store commands and permissions not registered.");
+            _logger.LogDebug("AdminManager not available — store commands and permissions not registered.");
             return;
         }
 
@@ -198,7 +198,7 @@ public class AdminCommandModule : IModule
         if (caller is not null)
             caller.Print(HudPrintChannel.Chat, Chat(message));
         else
-            _logger.LogInformation("{Message}", message);
+            _logger.LogDebug("{Message}", message);
     }
 
     private bool TryResolveTarget(

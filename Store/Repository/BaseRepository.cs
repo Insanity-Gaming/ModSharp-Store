@@ -5,11 +5,12 @@ namespace InsanityGaming.Store.Repository;
 
 public class BaseRepository<T> : IRepository<T> where T : class, new()
 {
-    protected readonly ISqlSugarClient Db;
+    private readonly ISqlSugarClient _db;
+    protected ISqlSugarClient Db => _db.CopyNew();
 
     public BaseRepository(ISqlSugarClient db)
     {
-        Db = db;
+        _db = db;
     }
 
     public async Task<T?> GetByIdAsync(object id) =>

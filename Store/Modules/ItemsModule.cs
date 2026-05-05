@@ -1,4 +1,4 @@
-using InsanityGaming.Store.Interfaces;
+﻿using InsanityGaming.Store.Interfaces;
 using InsanityGaming.Store.Models;
 using InsanityGaming.Store.Services;
 using Microsoft.Extensions.Logging;
@@ -32,7 +32,7 @@ public class ItemsModule : IModule, IItems
 
     public bool Init()
     {
-        _logger.LogInformation("ItemsModule initialized");
+        _logger.LogDebug("ItemsModule initialized");
         return true;
     }
 

@@ -1,4 +1,4 @@
-using InsanityGaming.Store.Interfaces;
+﻿using InsanityGaming.Store.Interfaces;
 using InsanityGaming.Store.Models;
 using Microsoft.Extensions.Logging;
 using Sharp.Shared.GameEntities;
@@ -35,13 +35,13 @@ public class EquipmentManager : IEquipmentManager
         var definition = _itemService.GetByUnique(unique);
         if (definition is null)
         {
-            _logger.LogWarning("EquipAsync: unknown item '{Unique}'", unique);
+            _logger.LogDebug("EquipAsync: unknown item '{Unique}'", unique);
             return false;
         }
 
         if (definition.Team != 0 && definition.Team != team)
         {
-            _logger.LogWarning("EquipAsync: item '{Unique}' is team-restricted (item team {ItemTeam}, player team {PlayerTeam})",
+            _logger.LogDebug("EquipAsync: item '{Unique}' is team-restricted (item team {ItemTeam}, player team {PlayerTeam})",
                 unique, definition.Team, team);
             return false;
         }
@@ -49,14 +49,14 @@ public class EquipmentManager : IEquipmentManager
         var inventory = await _inventoryRepo.GetByPlayerAsync(steamId);
         if (!inventory.Any(i => i.Unique == unique) && !_sessionStore.Has(steamId, unique))
         {
-            _logger.LogWarning("EquipAsync: player {SteamId} does not own item '{Unique}'", steamId, unique);
+            _logger.LogDebug("EquipAsync: player {SteamId} does not own item '{Unique}'", steamId, unique);
             return false;
         }
 
         var itemType = _itemService.GetItemType(unique);
         if (itemType is null)
         {
-            _logger.LogWarning("EquipAsync: no item type registered for '{Unique}'", unique);
+            _logger.LogDebug("EquipAsync: no item type registered for '{Unique}'", unique);
             return false;
         }
 
@@ -79,38 +79,38 @@ public class EquipmentManager : IEquipmentManager
 
     public async Task ApplyEquippedItemsAsync(IPlayerPawn pawn, ulong steamId, int team)
     {
-        _logger.LogInformation("[Apply] ApplyEquippedItems: steamId={SteamId} team={Team}", steamId, team);
+        _logger.LogDebug("[Apply] ApplyEquippedItems: steamId={SteamId} team={Team}", steamId, team);
 
         var equipped = await _equipmentRepo.GetByPlayerAndTeamAsync(steamId, team);
         var inventory = await _inventoryRepo.GetByPlayerAsync(steamId);
         var ownedUniques = inventory.Select(i => i.Unique).ToHashSet(StringComparer.Ordinal);
 
-        _logger.LogInformation("[Apply] Found {EquippedCount} equipped row(s), {InvCount} inventory item(s)", equipped.Count(), ownedUniques.Count);
+        _logger.LogDebug("[Apply] Found {EquippedCount} equipped row(s), {InvCount} inventory item(s)", equipped.Count(), ownedUniques.Count);
 
         foreach (var equipment in equipped)
         {
             var owned = ownedUniques.Contains(equipment.Unique) || _sessionStore.Has(steamId, equipment.Unique);
             if (!owned)
             {
-                _logger.LogWarning("[Apply] Skipping '{Unique}' — not owned by {SteamId}", equipment.Unique, steamId);
+                _logger.LogDebug("[Apply] Skipping '{Unique}' — not owned by {SteamId}", equipment.Unique, steamId);
                 continue;
             }
 
             var definition = _itemService.GetByUnique(equipment.Unique);
             if (definition is null)
             {
-                _logger.LogWarning("[Apply] No definition found for '{Unique}'", equipment.Unique);
+                _logger.LogDebug("[Apply] No definition found for '{Unique}'", equipment.Unique);
                 continue;
             }
 
             var itemType = _itemService.GetItemType(equipment.Unique);
             if (itemType is null)
             {
-                _logger.LogWarning("[Apply] No item type registered for '{Unique}'", equipment.Unique);
+                _logger.LogDebug("[Apply] No item type registered for '{Unique}'", equipment.Unique);
                 continue;
             }
 
-            _logger.LogInformation("[Apply] Equipping '{Unique}' via {TypeName}", equipment.Unique, itemType.TypeName);
+            _logger.LogDebug("[Apply] Equipping '{Unique}' via {TypeName}", equipment.Unique, itemType.TypeName);
             itemType.Equip(pawn, definition);
         }
     }

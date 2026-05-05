@@ -1,4 +1,4 @@
-using InsanityGaming.Store.Interfaces;
+﻿using InsanityGaming.Store.Interfaces;
 using InsanityGaming.Store.Models;
 using Microsoft.Extensions.Logging;
 using Sharp.Shared.Units;
@@ -29,13 +29,13 @@ public class PurchaseService : IPurchaseService
         var definition = _itemService.GetByUnique(unique);
         if (definition is null)
         {
-            _logger.LogWarning("BuyAsync: unknown item '{Unique}'", unique);
+            _logger.LogDebug("BuyAsync: unknown item '{Unique}'", unique);
             return PurchaseResult.ItemNotFound;
         }
 
         if (!definition.Purchasable)
         {
-            _logger.LogWarning("BuyAsync: item '{Unique}' is not purchasable", unique);
+            _logger.LogDebug("BuyAsync: item '{Unique}' is not purchasable", unique);
             return PurchaseResult.NotPurchasable;
         }
 
@@ -52,7 +52,7 @@ public class PurchaseService : IPurchaseService
 
         if (!_credits.AddCreditsBySlot(slot, -(int)definition.Price))
         {
-            _logger.LogWarning("BuyAsync: failed to deduct {Price} credits from slot {Slot}", definition.Price, slot);
+            _logger.LogDebug("BuyAsync: failed to deduct {Price} credits from slot {Slot}", definition.Price, slot);
             return PurchaseResult.InsufficientCredits;
         }
 
@@ -70,7 +70,7 @@ public class PurchaseService : IPurchaseService
             return PurchaseResult.ItemNotFound;
         }
 
-        _logger.LogInformation("BuyAsync: player {SteamId} purchased '{Unique}' for {Price} credits", steamId, unique, definition.Price);
+        _logger.LogDebug("BuyAsync: player {SteamId} purchased '{Unique}' for {Price} credits", steamId, unique, definition.Price);
         return PurchaseResult.Success;
     }
 }

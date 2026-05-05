@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Text.Json;
 using InsanityGaming.Store.Configs;
@@ -132,7 +132,7 @@ public class Store : IModSharpModule
 
         _logger = _services.GetRequiredService<ILogger<Store>>();
 
-        _logger.LogInformation("Store module constructed (HotReload: {HotReload})", hotReload);
+        _logger.LogDebug("Store module constructed (HotReload: {HotReload})", hotReload);
     }
 
     public bool Init()
@@ -143,7 +143,7 @@ public class Store : IModSharpModule
                 _logger.LogError($"Store Module {service.GetType().Name} could not be initialized.");
         }
 
-        _logger.LogInformation("Store Init");
+        _logger.LogDebug("Store Init");
         return true;
     }
 
@@ -191,7 +191,7 @@ public class Store : IModSharpModule
 
     public void Shutdown()
     {
-        _logger.LogInformation("Store Shutdown");
+        _logger.LogDebug("Store Shutdown");
 
         foreach (var service in _services.GetServices<IModule>())
         {
@@ -216,7 +216,7 @@ public class Store : IModSharpModule
         {
             try
             {
-                _logger.LogInformation("Config reload detected");
+                _logger.LogDebug("Config reload detected");
 
                 var newConfig = new StoreConfig();
                 _configRoot.Bind(newConfig);
@@ -224,7 +224,7 @@ public class Store : IModSharpModule
                 _config = newConfig;
                 OnConfigReload();
 
-                _logger.LogInformation("Config successfully reloaded");
+                _logger.LogDebug("Config successfully reloaded");
             }
             catch (Exception ex)
             {

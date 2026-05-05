@@ -1,4 +1,4 @@
-using InsanityGaming.Store.Interfaces;
+﻿using InsanityGaming.Store.Interfaces;
 using Microsoft.Extensions.Logging;
 
 namespace InsanityGaming.Store.Services;
@@ -18,7 +18,7 @@ public class ExpiryCleanupService : IModule
     public bool Init()
     {
         _timer = new Timer(OnTick, null, TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(60));
-        _logger.LogInformation("ExpiryCleanupService started (60s interval)");
+        _logger.LogDebug("ExpiryCleanupService started (60s interval)");
         return true;
     }
 

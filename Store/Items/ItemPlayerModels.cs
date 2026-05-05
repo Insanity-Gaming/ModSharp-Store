@@ -1,4 +1,4 @@
-using InsanityGaming.Store.Interfaces;
+﻿using InsanityGaming.Store.Interfaces;
 using Microsoft.Extensions.Logging;
 using Sharp.Shared.Enums;
 using Sharp.Shared.GameEntities;
@@ -34,7 +34,7 @@ public class ItemPlayerModels : IItemType
             if (controller is null) return;
 
             var playerName = controller.PlayerName;
-            _logger.LogInformation("[{Type}] Equipping {Player} → model: {Model} skin: {Skin} color: {Color}",
+            _logger.LogDebug("[{Type}] Equipping {Player} → model: {Model} skin: {Skin} color: {Color}",
                 TypeName, playerName, item.Model, item.Skin ?? "default", item.Color ?? "default");
 
             pawn.SetModel(item.Model);

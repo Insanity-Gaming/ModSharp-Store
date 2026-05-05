@@ -1,4 +1,4 @@
-using InsanityGaming.Store.Interfaces;
+﻿using InsanityGaming.Store.Interfaces;
 using Microsoft.Extensions.Logging;
 using Sharp.Modules.TargetingManager.Shared;
 using Sharp.Shared;
@@ -33,7 +33,7 @@ public sealed class TargetingManagerHolder : IModule
             .GetOptionalSharpModuleInterface<ITargetingManager>(ITargetingManager.Identity);
 
         if (_targetingManager?.Instance is null && logFailure)
-            _logger.LogWarning("TargetingManager is not installed. Target selectors will be limited.");
+            _logger.LogDebug("TargetingManager is not installed. Target selectors will be limited.");
     }
 
     public bool IsConnected() => _targetingManager is not null;

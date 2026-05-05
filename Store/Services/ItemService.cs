@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using InsanityGaming.Store.Configs;
 using InsanityGaming.Store.Interfaces;
 using InsanityGaming.Store.Items;
@@ -46,7 +46,7 @@ public class ItemService : IItemService
 
             if (!File.Exists(filePath))
             {
-                _logger.LogWarning("Item config not found: {Path}", filePath);
+                _logger.LogDebug("Item config not found: {Path}", filePath);
                 continue;
             }
 
@@ -66,7 +66,7 @@ public class ItemService : IItemService
 
             if (!_typesByName.TryGetValue(typeName, out var itemType))
             {
-                _logger.LogWarning("No IItemType registered for type name '{TypeName}'", typeName);
+                _logger.LogDebug("No IItemType registered for type name '{TypeName}'", typeName);
                 continue;
             }
 
@@ -78,7 +78,7 @@ public class ItemService : IItemService
                 _typesByUnique[item.Unique] = itemType;
             }
 
-            _logger.LogInformation("Loaded {Count} items from {TypeName} (slot {Slot})",
+            _logger.LogDebug("Loaded {Count} items from {TypeName} (slot {Slot})",
                 typeConfig.Items.Count, typeName, typeConfig.Slot);
         }
     }
