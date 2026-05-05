@@ -17,4 +17,7 @@ public class StoreConfig : IConfig
     public string DbPassword { get; set; } = "";
 
     public List<string> EnabledItems { get; set; } = [];
+
+    // Flag/permission → credit multiplier. Highest matching flag wins.
+    public Dictionary<string, float> FlagMultipliers { get; set; } = new();
 }

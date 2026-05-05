@@ -3,7 +3,6 @@ using InsanityGaming.Store.Interfaces;
 using InsanityGaming.Store.Models;
 using InsanityGaming.Store.Services;
 using Microsoft.Extensions.Logging;
-using Sharp.Shared.Definition;
 using Sharp.Shared.Enums;
 using Sharp.Shared.Listeners;
 using Sharp.Shared.Objects;
@@ -44,8 +43,23 @@ public class CreditsModule : IModule, ICredits, IClientListener
     {
         _timer = _bridge.ModSharp.PushTimer(AwardCredits, _config.CreditFrequency, GameTimerFlags.Repeatable);
         _bridge.ClientManager.InstallClientListener(this);
-
         return true;
+    }
+
+    private float GetFlagMultiplier(IGameClient client)
+    {
+        if (_config.FlagMultipliers.Count == 0) return 1.0f;
+
+        var admin = _adminManager.Manager?.GetAdmin(new SteamID(client.SteamId));
+        if (admin is null) return 1.0f;
+
+        var best = 1.0f;
+        foreach (var (flag, multiplier) in _config.FlagMultipliers)
+        {
+            if (admin.HasPermission(flag) && multiplier > best)
+                best = multiplier;
+        }
+        return best;
     }
 
     public void Shutdown()
@@ -159,24 +173,27 @@ public class CreditsModule : IModule, ICredits, IClientListener
             1.0f + (_config.DynamicMultiplierMax - 1.0f) * (1.0f - percentFull);
 
         var basePoints = _config.CreditReward * _config.CreditMultiplier;
-        var finalReward = (uint)(basePoints * dynamicMultiplier);
+
+        var clientBySlot = _bridge.ClientManager.GetGameClients(true)
+            .Where(c => c.SteamId != 0)
+            .ToDictionary(c => c.Slot);
 
         foreach (var controller in players)
         {
-            var success = AddCreditsBySlot(controller.PlayerSlot, (int)finalReward);
+            clientBySlot.TryGetValue(controller.PlayerSlot, out var client);
+            var flagMultiplier = client is not null ? GetFlagMultiplier(client) : 1.0f;
+            var reward         = (uint)(basePoints * dynamicMultiplier * flagMultiplier);
 
-            if (!success)
-            {
+            if (!AddCreditsBySlot(controller.PlayerSlot, (int)reward))
                 _logger.LogWarning("Failed to award credits to slot {Slot}", controller.PlayerSlot);
-            }
         }
 
         _logger.LogInformation(
-            "Credits tick | Players: {Count}/{Max} ({Percent:P0}) | Reward: {Reward} | Mult: {Mult:F2}",
+            "Credits tick | Players: {Count}/{Max} ({Percent:P0}) | Base: {Base} | DynMult: {Mult:F2}",
             count,
             maxPlayers,
             percentFull,
-            finalReward,
+            (uint)(basePoints * dynamicMultiplier),
             dynamicMultiplier
         );
 
