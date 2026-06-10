@@ -70,6 +70,10 @@ public class PurchaseService : IPurchaseService
             return PurchaseResult.ItemNotFound;
         }
 
+        // Persist the deducted balance immediately so a crash or late race between
+        // purchase and the next periodic save cannot undo the deduction or gift the item.
+        await _credits.PersistAsync(steamId, slot);
+
         _logger.LogDebug("BuyAsync: player {SteamId} purchased '{Unique}' for {Price} credits", steamId, unique, definition.Price);
         return PurchaseResult.Success;
     }

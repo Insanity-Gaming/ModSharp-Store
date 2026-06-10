@@ -8,4 +8,5 @@ public interface ICredits : ICreditsApi
     uint GetCreditsBySlot(PlayerSlot slot);
     bool SetCreditsBySlot(PlayerSlot slot, uint amount);
     bool AddCreditsBySlot(PlayerSlot slot, int amount);
+    Task PersistAsync(ulong steamId, PlayerSlot slot);
 }

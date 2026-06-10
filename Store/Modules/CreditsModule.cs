@@ -1,4 +1,4 @@
-﻿using InsanityGaming.Store.Configs;
+using InsanityGaming.Store.Configs;
 using InsanityGaming.Store.Interfaces;
 using InsanityGaming.Store.Models;
 using InsanityGaming.Store.Services;
@@ -19,6 +19,9 @@ public class CreditsModule : IModule, ICredits, IClientListener, IEventListener
     private readonly Store _plugin;
     private StoreConfig _config;
 
+    // All reads and writes to _credits MUST acquire _sync first.
+    // _connectRetries is only ever touched on the game thread, so no lock needed.
+    private readonly object _sync = new();
     private readonly Dictionary<PlayerSlot, uint> _credits = new();
     private readonly Dictionary<ulong, int> _connectRetries = new();
 
@@ -69,15 +72,25 @@ public class CreditsModule : IModule, ICredits, IClientListener, IEventListener
     {
         _bridge.ModSharp.StopTimer(_timer);
 
-        foreach (var c in _bridge.ClientManager.GetGameClients(true))
+        // Snapshot under lock, save outside lock so no DB work holds _sync.
+        var clients = _bridge.ClientManager.GetGameClients(true).ToList();
+
+        foreach (var c in clients)
         {
             if (c.SteamId == 0) continue;
-            if (!_credits.TryGetValue(c.Slot, out var amount)) continue;
+
+            uint amount;
+            lock (_sync)
+            {
+                if (!_credits.TryGetValue(c.Slot, out amount)) continue;
+            }
+
             try { _repository.UpdateCreditsAsync(c.SteamId, amount).Wait(); }
             catch (Exception ex) { _logger.LogError(ex, "[Credits] Shutdown persist failed for {SteamId}", c.SteamId); }
         }
 
-        _credits.Clear();
+        lock (_sync) { _credits.Clear(); }
+
         _bridge.EventManager.RemoveEventListener(this);
         _bridge.ClientManager.RemoveClientListener(this);
     }
@@ -102,25 +115,36 @@ public class CreditsModule : IModule, ICredits, IClientListener, IEventListener
 
     public void OnClientDisconnected(IGameClient client, NetworkDisconnectionReason reason)
     {
-        _connectRetries.Remove(client.SteamId);
-
-        var slot    = client.Slot;
-        if (!_credits.Remove(slot, out var amount))
-            return;
-
-        if (client.SteamId == 0) return;
-
         var steamId = client.SteamId;
+        var slot    = client.Slot;
 
-        try
+        // _connectRetries is game-thread-only, no lock needed.
+        _connectRetries.Remove(steamId);
+
+        uint amount;
+        lock (_sync)
         {
-            _repository.UpdateCreditsAsync(steamId, amount);
-            _logger.LogDebug("[Credits] Persisted {Credits} for {SteamId}", amount, steamId);
+            // If the slot was never populated (churn connect that never completed its load),
+            // there is nothing to save — and we must NOT save 0 for a real balance.
+            if (!_credits.Remove(slot, out amount))
+                return;
         }
-        catch (Exception ex)
+
+        if (steamId == 0) return;
+
+        // Fire-and-forget with a real async try/catch so exceptions are observable.
+        _ = Task.Run(async () =>
         {
-            _logger.LogError(ex, "[Credits] Failed to persist credits for {SteamId}", steamId);
-        }
+            try
+            {
+                await _repository.UpdateCreditsAsync(steamId, amount);
+                _logger.LogDebug("[Credits] Persisted {Credits} for {SteamId}", amount, steamId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "[Credits] Failed to persist credits for {SteamId}", steamId);
+            }
+        });
     }
 
     int IClientListener.ListenerVersion  => IClientListener.ApiVersion;
@@ -204,15 +228,54 @@ public class CreditsModule : IModule, ICredits, IClientListener, IEventListener
                     await _repository.UpsertAsync(user);
                 }
 
-                _credits[slot] = user.Credits;
-                _logger.LogDebug("[Credits] Loaded {Credits} for {SteamId} (slot {Slot})",
-                    user.Credits, steamId, slot);
+                var value = user.Credits;
+
+                // Marshal the commit back to the game thread so engine objects
+                // (client list, slot identity) are touched only there.
+                _bridge.ModSharp.PushTimer(() => CommitLoad(steamId, slot, value), 0f, GameTimerFlags.None);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "[Credits] Failed to load credits for {SteamId}", steamId);
             }
         });
+    }
+
+    /// <summary>
+    /// Runs on the game thread. Commits a loaded balance only if the slot still belongs
+    /// to the expected player AND credits have not already been populated this session
+    /// (idempotency guard against duplicate player_connect_full events).
+    /// </summary>
+    private void CommitLoad(ulong steamId, PlayerSlot slot, uint value)
+    {
+        // Identity/liveness check: the slot must still be held by the same SteamID.
+        // If the player disconnected and the slot was reused, the SteamID will differ
+        // (or be 0 for a connecting player). Discard to prevent contamination.
+        var client = _bridge.ClientManager
+            .GetGameClients(true)
+            .FirstOrDefault(c => c.Slot == slot);
+
+        if (client?.SteamId != steamId)
+        {
+            _logger.LogDebug("[Credits] CommitLoad discarded for {SteamId} slot {Slot}: slot reassigned or player gone", steamId, slot);
+            return;
+        }
+
+        lock (_sync)
+        {
+            // If credits are already present for this slot the player's session is live
+            // (purchases/awards have already touched the value). Overwriting with the stale
+            // DB read would lose those changes — discard.
+            if (_credits.ContainsKey(slot))
+            {
+                _logger.LogDebug("[Credits] CommitLoad discarded for {SteamId} slot {Slot}: already loaded (duplicate connect event)", steamId, slot);
+                return;
+            }
+
+            _credits[slot] = value;
+        }
+
+        _logger.LogDebug("[Credits] Loaded {Credits} for {SteamId} (slot {Slot})", value, steamId, slot);
     }
 
     int IEventListener.ListenerVersion  => IEventListener.ApiVersion;
@@ -266,10 +329,19 @@ public class CreditsModule : IModule, ICredits, IClientListener, IEventListener
             dynamicMultiplier
         );
 
-        var snapshot = _bridge.ClientManager.GetGameClients(true)
-            .Where(c => c.SteamId != 0 && _credits.ContainsKey(c.Slot))
-            .Select(c => (SteamId: (ulong)c.SteamId, Credits: _credits[c.Slot]))
+        // Snapshot under lock, then persist on the threadpool.
+        var clients = _bridge.ClientManager.GetGameClients(true)
+            .Where(c => c.SteamId != 0)
             .ToList();
+
+        List<(ulong SteamId, uint Credits)> snapshot;
+        lock (_sync)
+        {
+            snapshot = clients
+                .Where(c => _credits.ContainsKey(c.Slot))
+                .Select(c => (SteamId: (ulong)c.SteamId, Credits: _credits[c.Slot]))
+                .ToList();
+        }
 
         _ = Task.Run((Func<Task>)(async () =>
         {
@@ -284,31 +356,52 @@ public class CreditsModule : IModule, ICredits, IClientListener, IEventListener
 
     public uint GetCreditsBySlot(PlayerSlot slot)
     {
-        return _credits.GetValueOrDefault(slot);
+        lock (_sync)
+            return _credits.GetValueOrDefault(slot);
     }
 
     public bool SetCreditsBySlot(PlayerSlot slot, uint amount)
     {
-        _credits[slot] = amount;
-        return true;
+        lock (_sync)
+        {
+            _credits[slot] = amount;
+            return true;
+        }
     }
 
     public bool AddCreditsBySlot(PlayerSlot slot, int amount)
     {
-        var current = _credits.GetValueOrDefault(slot);
+        lock (_sync)
+        {
+            // Return false for unloaded slots so we don't ghost-create entries
+            // with a stale 0 baseline (e.g., award tick firing before load completes).
+            if (!_credits.TryGetValue(slot, out var current))
+                return false;
 
-        var result = (long)current + amount;
+            var result = (long)current + amount;
 
-        // Prevent negative
-        if (result < 0)
-            return false;
+            // Prevent negative
+            if (result < 0)
+                return false;
 
-        // Prevent overflow
-        if (result > uint.MaxValue)
-            result = uint.MaxValue;
+            // Prevent overflow
+            if (result > uint.MaxValue)
+                result = uint.MaxValue;
 
-        _credits[slot] = (uint)result;
-        return true;
+            _credits[slot] = (uint)result;
+            return true;
+        }
+    }
+
+    public Task PersistAsync(ulong steamId, PlayerSlot slot)
+    {
+        uint value;
+        lock (_sync)
+        {
+            if (!_credits.TryGetValue(slot, out value))
+                return Task.CompletedTask;
+        }
+        return _repository.UpdateCreditsAsync(steamId, value);
     }
 
     // -------------------------
