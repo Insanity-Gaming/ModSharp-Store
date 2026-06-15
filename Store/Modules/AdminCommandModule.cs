@@ -163,9 +163,13 @@ public class AdminCommandModule : IModule
 
         var unique = cmd.GetArg(2);
         _ = _items.GiveItemAsync(steamId, unique).ContinueWith(t =>
-            Reply(caller, t.Result
-                ? $"Gave {ChatColor.Green}{unique}{ChatColor.Grey} to {ChatColor.Green}{targetName}{ChatColor.Grey}."
-                : $"Failed to give {ChatColor.Green}{unique}{ChatColor.Grey} to {ChatColor.Green}{targetName}{ChatColor.Grey} — they may already own it."));
+        {
+            _bridge.ModSharp.InvokeFrameAction(() =>
+                Reply(caller, t.Result
+                    ? $"Gave {ChatColor.Green}{unique}{ChatColor.Grey} to {ChatColor.Green}{targetName}{ChatColor.Grey}."
+                    : $"Failed to give {ChatColor.Green}{unique}{ChatColor.Grey} to {ChatColor.Green}{targetName}{ChatColor.Grey} — they may already own it.")
+            );
+        });
     }
 
     private void OnRemoveItemCommand(IGameClient? caller, StringCommand cmd)
@@ -181,9 +185,13 @@ public class AdminCommandModule : IModule
 
         var unique = cmd.GetArg(2);
         _ = _items.RemoveItemAsync(steamId, unique).ContinueWith(t =>
-            Reply(caller, t.Result
-                ? $"Removed {ChatColor.Green}{unique}{ChatColor.Grey} from {ChatColor.Green}{targetName}{ChatColor.Grey}."
-                : $"Failed to remove {ChatColor.Green}{unique}{ChatColor.Grey} from {ChatColor.Green}{targetName}{ChatColor.Grey} — they may not own it."));
+        {
+            _bridge.ModSharp.InvokeFrameAction(() =>
+                Reply(caller, t.Result
+                    ? $"Removed {ChatColor.Green}{unique}{ChatColor.Grey} from {ChatColor.Green}{targetName}{ChatColor.Grey}."
+                    : $"Failed to remove {ChatColor.Green}{unique}{ChatColor.Grey} from {ChatColor.Green}{targetName}{ChatColor.Grey} — they may not own it.")
+            );
+        });
     }
 
     // -------------------------

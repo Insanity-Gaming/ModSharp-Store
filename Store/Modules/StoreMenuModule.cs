@@ -161,7 +161,9 @@ public class StoreMenuModule : IModule, IClientListener
     private async Task OpenStoreAsync(IGameClient client, IMenuManager menuManager)
     {
         await RefreshCacheAsync(client);
-        menuManager.DisplayMenu(client, BuildMainMenu(client));
+        _bridge.ModSharp.InvokeFrameAction(() =>
+            menuManager.DisplayMenu(client, BuildMainMenu(client))
+        );
     }
 
     // -------------------------
@@ -456,13 +458,19 @@ public class StoreMenuModule : IModule, IClientListener
                     _                                  => Chat("Purchase failed. Please try again."),
                 };
 
-                client.Print(HudPrintChannel.Chat, message);
+                _bridge.ModSharp.InvokeFrameAction(() =>
+                    client.Print(HudPrintChannel.Chat, message)
+                );
                 return;
             }
 
-            client.Print(HudPrintChannel.Chat, Chat($"You purchased {ChatColor.Green}{item.Name}{ChatColor.Grey} for {ChatColor.Green}{item.Price} credits{ChatColor.Grey}!"));
+            _bridge.ModSharp.InvokeFrameAction(() =>
+                client.Print(HudPrintChannel.Chat, Chat($"You purchased {ChatColor.Green}{item.Name}{ChatColor.Grey} for {ChatColor.Green}{item.Price} credits{ChatColor.Grey}!"))
+            );
             await RefreshCacheAsync(client);
-            controller.Next(BuildMainMenu(client));
+            _bridge.ModSharp.InvokeFrameAction(() =>
+                controller.Next(BuildMainMenu(client))
+            );
         }
         finally
         {
@@ -554,20 +562,25 @@ public class StoreMenuModule : IModule, IClientListener
 
             var success = await _equipmentManager.EquipAsync(client.SteamId, item.Unique, team);
 
-            if (!success)
-            {
-                client.Print(HudPrintChannel.Chat, Chat($"Failed to equip {ChatColor.Green}{item.Name}{ChatColor.Grey}."));
-                return;
-            }
-
-            client.Print(HudPrintChannel.Chat, Chat($"{ChatColor.Green}{item.Name}{ChatColor.Grey} equipped for {ChatColor.Green}{teamLabel}{ChatColor.Grey}!"));
             await RefreshCacheAsync(client);
-            controller.Next(BuildEquipItemList(type, client));
+            _bridge.ModSharp.InvokeFrameAction(() =>
+            {
+                if (!success)
+                {
+                    client.Print(HudPrintChannel.Chat, Chat($"Failed to equip {ChatColor.Green}{item.Name}{ChatColor.Grey}."));
+                    return;
+                }
+
+                client.Print(HudPrintChannel.Chat, Chat($"{ChatColor.Green}{item.Name}{ChatColor.Grey} equipped for {ChatColor.Green}{teamLabel}{ChatColor.Grey}!"));
+                controller.Next(BuildEquipItemList(type, client));
+            });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "DoEquipTeamAsync failed for {SteamId} item '{Unique}' team {Team}", client.SteamId, item.Unique, team);
-            client.Print(HudPrintChannel.Chat, Chat("An error occurred while equipping. Please try again."));
+            _bridge.ModSharp.InvokeFrameAction(() =>
+                client.Print(HudPrintChannel.Chat, Chat("An error occurred while equipping. Please try again."))
+            );
         }
     }
 
@@ -585,20 +598,25 @@ public class StoreMenuModule : IModule, IClientListener
             var tSuccess  = await _equipmentManager.EquipAsync(client.SteamId, item.Unique, 2);
             var ctSuccess = await _equipmentManager.EquipAsync(client.SteamId, item.Unique, 3);
 
-            if (!tSuccess || !ctSuccess)
-            {
-                client.Print(HudPrintChannel.Chat, Chat($"Failed to equip {ChatColor.Green}{item.Name}{ChatColor.Grey} for both teams."));
-                return;
-            }
-
-            client.Print(HudPrintChannel.Chat, Chat($"{ChatColor.Green}{item.Name}{ChatColor.Grey} equipped for {ChatColor.Green}both teams{ChatColor.Grey}!"));
             await RefreshCacheAsync(client);
-            controller.Next(BuildEquipItemList(type, client));
+            _bridge.ModSharp.InvokeFrameAction(() =>
+            {
+                if (!tSuccess || !ctSuccess)
+                {
+                    client.Print(HudPrintChannel.Chat, Chat($"Failed to equip {ChatColor.Green}{item.Name}{ChatColor.Grey} for both teams."));
+                    return;
+                }
+
+                client.Print(HudPrintChannel.Chat, Chat($"{ChatColor.Green}{item.Name}{ChatColor.Grey} equipped for {ChatColor.Green}both teams{ChatColor.Grey}!"));
+                controller.Next(BuildEquipItemList(type, client));
+            });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "DoEquipBothAsync failed for {SteamId} item '{Unique}'", client.SteamId, item.Unique);
-            client.Print(HudPrintChannel.Chat, Chat("An error occurred while equipping. Please try again."));
+            _bridge.ModSharp.InvokeFrameAction(() =>
+                client.Print(HudPrintChannel.Chat, Chat("An error occurred while equipping. Please try again."))
+            );
         }
     }
 
@@ -614,20 +632,25 @@ public class StoreMenuModule : IModule, IClientListener
             var teamLabel = equipment.Team == 2 ? "Terrorists" : "Counter-Terrorists";
             var success   = await _equipmentManager.UnequipAsync(client.SteamId, equipment.Slot, equipment.Team);
 
-            if (!success)
-            {
-                client.Print(HudPrintChannel.Chat, Chat("Failed to unequip item."));
-                return;
-            }
-
-            client.Print(HudPrintChannel.Chat, Chat($"{ChatColor.Green}{item.Name}{ChatColor.Grey} unequipped from {ChatColor.Green}{teamLabel}{ChatColor.Grey}."));
             await RefreshCacheAsync(client);
-            controller.Next(BuildEquipItemList(type, client));
+            _bridge.ModSharp.InvokeFrameAction(() =>
+            {
+                if (!success)
+                {
+                    client.Print(HudPrintChannel.Chat, Chat("Failed to unequip item."));
+                    return;
+                }
+
+                client.Print(HudPrintChannel.Chat, Chat($"{ChatColor.Green}{item.Name}{ChatColor.Grey} unequipped from {ChatColor.Green}{teamLabel}{ChatColor.Grey}."));
+                controller.Next(BuildEquipItemList(type, client));
+            });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "DoUnequipSingleAsync failed for {SteamId} item '{Unique}'", client.SteamId, item.Unique);
-            client.Print(HudPrintChannel.Chat, Chat("An error occurred while unequipping. Please try again."));
+            _bridge.ModSharp.InvokeFrameAction(() =>
+                client.Print(HudPrintChannel.Chat, Chat("An error occurred while unequipping. Please try again."))
+            );
         }
     }
 
@@ -639,20 +662,25 @@ public class StoreMenuModule : IModule, IClientListener
             var tSuccess  = await _equipmentManager.UnequipAsync(client.SteamId, equippedT.Slot, equippedT.Team);
             var ctSuccess = await _equipmentManager.UnequipAsync(client.SteamId, equippedCT.Slot, equippedCT.Team);
 
-            if (!tSuccess || !ctSuccess)
-            {
-                client.Print(HudPrintChannel.Chat, Chat("Failed to unequip item."));
-                return;
-            }
-
-            client.Print(HudPrintChannel.Chat, Chat($"{ChatColor.Green}{item.Name}{ChatColor.Grey} unequipped from {ChatColor.Green}both teams{ChatColor.Grey}."));
             await RefreshCacheAsync(client);
-            controller.Next(BuildEquipItemList(type, client));
+            _bridge.ModSharp.InvokeFrameAction(() =>
+            {
+                if (!tSuccess || !ctSuccess)
+                {
+                    client.Print(HudPrintChannel.Chat, Chat("Failed to unequip item."));
+                    return;
+                }
+
+                client.Print(HudPrintChannel.Chat, Chat($"{ChatColor.Green}{item.Name}{ChatColor.Grey} unequipped from {ChatColor.Green}both teams{ChatColor.Grey}."));
+                controller.Next(BuildEquipItemList(type, client));
+            });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "DoUnequipBothAsync failed for {SteamId} item '{Unique}'", client.SteamId, item.Unique);
-            client.Print(HudPrintChannel.Chat, Chat("An error occurred while unequipping. Please try again."));
+            _bridge.ModSharp.InvokeFrameAction(() =>
+                client.Print(HudPrintChannel.Chat, Chat("An error occurred while unequipping. Please try again."))
+            );
         }
     }
 
@@ -673,18 +701,17 @@ public class StoreMenuModule : IModule, IClientListener
 
     private async Task RefreshCacheAsync(IGameClient client)
     {
-        var steamId    = client.SteamId;
-        var playerTeam = (int)(client.GetPlayerController()?.Team ?? CStrikeTeam.UnAssigned);
-
+        var steamId = client.SteamId;
         var inventory = await _inventoryRepo.GetByPlayerAsync(steamId);
+        var equipped  = await _equipmentRepo.GetByPlayerAsync(steamId);
 
-        var equipped = await _equipmentRepo.GetByPlayerAsync(steamId);
-
-        var credits = _credits.GetCreditsBySlot(client.Slot);
-
-        var cache = GetOrCreateCache(steamId);
-        cache.OwnedUniques = [..inventory.Select(i => i.Unique)];
-        cache.Equipped     = equipped;
-        cache.Credits      = credits;
+        _bridge.ModSharp.InvokeFrameAction(() =>
+        {
+            var credits = _credits.GetCreditsBySlot(client.Slot);
+            var cache = GetOrCreateCache(steamId);
+            cache.OwnedUniques = [..inventory.Select(i => i.Unique)];
+            cache.Equipped     = equipped;
+            cache.Credits      = credits;
+        });
     }
 }
