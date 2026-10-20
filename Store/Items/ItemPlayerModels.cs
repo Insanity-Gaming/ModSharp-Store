@@ -16,6 +16,11 @@ public class ItemPlayerModels : IItemType
     public string TypeName => "player_models";
     public int Slot => EquipmentSlot;
 
+    // A model is one model for everyone, so it cannot be hidden per viewer.
+    public StoreVisibilityToggle? VisibilityToggle => null;
+
+    private sealed record ModelSnapshot(string? Model, Color32 Color);
+
     public ItemPlayerModels(InterfaceBridge bridge, ILogger<ItemPlayerModels> logger)
     {
         _bridge = bridge;
@@ -37,33 +42,70 @@ public class ItemPlayerModels : IItemType
             _logger.LogDebug("[{Type}] Equipping {Player} → model: {Model} skin: {Skin} color: {Color}",
                 TypeName, playerName, item.Model, item.Skin ?? "default", item.Color ?? "default");
 
-            pawn.SetModel(item.Model);
+            ApplyNow(pawn, item);
 
-            if (item.Skin is not null)
-                pawn.AcceptInput("Skin", pawn, pawn, item.Skin);
-
-            if (item.Color is null) return;
-
-            if (TryParseColor(item.Color, out var color))
-                pawn.RenderColor = color;
-            else if(item.Color.Equals("random",  StringComparison.InvariantCultureIgnoreCase))
-            {
-                var random = new Random();
-                pawn.RenderColor = new Color32((byte) random.Next(0, 255), (byte) random.Next(0, 255), (byte) random.Next(0, 255), 254);
-            }else if (item.Color.Equals("team", StringComparison.InvariantCultureIgnoreCase))
-            {
-                switch (pawn.Team)
-                {
-                    case CStrikeTeam.TE:
-                        pawn.RenderColor = new Color32(255, 0, 0, 255);
-                        break;
-                    case CStrikeTeam.CT:
-                        pawn.RenderColor = new Color32(0, 0, 255, 255);
-                        break;
-                }
-            }
-            
         }, 0.5f, GameTimerFlags.None);
+    }
+
+    public void Preview(IPlayerPawn pawn, ItemDefinition item)
+    {
+        if (string.IsNullOrEmpty(item.Model) || !pawn.IsValid()) return;
+
+        ApplyNow(pawn, item);
+    }
+
+    public object? Snapshot(IPlayerPawn pawn)
+    {
+        if (!pawn.IsValid()) return null;
+
+        var model = pawn.GetBodyComponent()
+                        .AsBodyComponentSkeletonInstance
+                        .GetSkeletonInstance()?
+                        .GetModelState()
+                        .ModelName;
+
+        return new ModelSnapshot(model, pawn.RenderColor);
+    }
+
+    public void Restore(IPlayerPawn pawn, object? snapshot)
+    {
+        if (snapshot is not ModelSnapshot state || !pawn.IsValid()) return;
+
+        if (!string.IsNullOrEmpty(state.Model))
+            pawn.SetModel(state.Model);
+
+        // The original skin can't be read back; a model without a store skin uses skin 0.
+        pawn.AcceptInput("Skin", pawn, pawn, "0");
+        pawn.RenderColor = state.Color;
+    }
+
+    private void ApplyNow(IPlayerPawn pawn, ItemDefinition item)
+    {
+        pawn.SetModel(item.Model!);
+
+        if (item.Skin is not null)
+            pawn.AcceptInput("Skin", pawn, pawn, item.Skin);
+
+        if (item.Color is null) return;
+
+        if (TryParseColor(item.Color, out var color))
+            pawn.RenderColor = color;
+        else if(item.Color.Equals("random",  StringComparison.InvariantCultureIgnoreCase))
+        {
+            var random = new Random();
+            pawn.RenderColor = new Color32((byte) random.Next(0, 255), (byte) random.Next(0, 255), (byte) random.Next(0, 255), 254);
+        }else if (item.Color.Equals("team", StringComparison.InvariantCultureIgnoreCase))
+        {
+            switch (pawn.Team)
+            {
+                case CStrikeTeam.TE:
+                    pawn.RenderColor = new Color32(255, 0, 0, 255);
+                    break;
+                case CStrikeTeam.CT:
+                    pawn.RenderColor = new Color32(0, 0, 255, 255);
+                    break;
+            }
+        }
     }
 
     private static bool TryParseColor(string value, out Color32 color)

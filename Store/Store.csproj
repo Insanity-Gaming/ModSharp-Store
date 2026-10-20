@@ -37,10 +37,10 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="ModSharp.Sharp.Modules.AdminManager.Shared" Version="2.1.118" />
-        <PackageReference Include="ModSharp.Sharp.Modules.MenuManager.Shared" Version="2.1.118" />
-        <PackageReference Include="ModSharp.Sharp.Modules.TargetingManager.Shared" Version="2.1.123" />
-        <PackageReference Include="ModSharp.Sharp.Shared" Version="*" PrivateAssets="all" />
+        <PackageReference Include="ModSharp.Sharp.Modules.AdminManager.Shared" Version="2.1.189" />
+        <PackageReference Include="ModSharp.Sharp.Modules.ClientPreferences.Shared" Version="2.1.189" />
+        <PackageReference Include="ModSharp.Sharp.Modules.TargetingManager.Shared" Version="2.1.189" />
+        <PackageReference Include="ModSharp.Sharp.Shared" Version="2.1.189" PrivateAssets="all" />
         <PackageReference Include="SqlSugarCore" Version="5.1.4.214" />
     </ItemGroup>
 
