@@ -84,6 +84,18 @@ public sealed class PlayerHudLayoutHost
         return new PrivateHudLayout(entity);
     }
 
+    /// <summary>
+    /// Releases the slot's entity without killing it, so the caller can kill it later (e.g. after
+    /// input capture has been released). A new GetOrCreate for the slot then builds a fresh entity,
+    /// so a delayed kill can never hit a reopened store.
+    /// </summary>
+    public ICustomHudLayout? Detach(PlayerSlot slot)
+    {
+        var entity = _layouts[slot];
+        _layouts[slot] = null;
+        return entity is not null && entity.IsValid() ? entity : null;
+    }
+
     public void Kill(PlayerSlot slot)
     {
         var entity = _layouts[slot];

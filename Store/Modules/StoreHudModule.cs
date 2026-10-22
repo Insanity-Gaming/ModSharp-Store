@@ -58,6 +58,12 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
     private const string ToastPanel       = "toast";
     private const string ToastLabel       = "toast_lbl";
     private const string SettingsEmpty    = "settings_empty";
+    private const string CamControls      = "cam_controls";
+    private const string PreviewOffLabel  = "preview_unavailable";
+
+    // Delay between releasing input capture and killing the entity on a normal close, so the client
+    // has processed the capture release before the layout that owns it disappears.
+    private const double LayoutKillDelay  = 0.2;
 
     private static readonly string[] TabIds  = ["tab_buy", "tab_equip", "tab_settings"];
     private static readonly string[] TeamIds = ["team_t", "team_ct", "team_both"];
@@ -82,6 +88,12 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
         public int     TypeIndex { get; set; }
         public string? Selected  { get; set; }
         public bool    Pending   { get; set; }
+
+        /// <summary>
+        /// True when the player was alive on T/CT at open: third-person camera, freeze and live
+        /// preview. False is browse mode (dead / spectating): the full store, no pawn involved.
+        /// </summary>
+        public bool    LivePreview { get; set; }
 
         public HashSet<string>  OwnedUniques { get; set; } = [];
         public List<Equipment>  Equipped     { get; set; } = [];
@@ -258,18 +270,29 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
         {
             case "player_death":
                 if (e.GetPlayerController("userid") is { } dead)
-                    CloseSession(dead.PlayerSlot, CloseReason.Death);
+                    CloseLiveSession(dead.PlayerSlot, CloseReason.Death);
                 break;
 
             case "player_team":
                 if (e.GetPlayerController("userid") is { } switched)
-                    CloseSession(switched.PlayerSlot, CloseReason.TeamChange);
+                    CloseLiveSession(switched.PlayerSlot, CloseReason.TeamChange);
                 break;
 
             case "round_start":
-                CloseAll(CloseReason.RoundStart);
+                foreach (var slot in _sessions.Keys.ToArray())
+                    CloseLiveSession(slot, CloseReason.RoundStart);
                 break;
         }
+    }
+
+    /// <summary>
+    /// Pawn lifecycle events only end live-preview sessions (camera, freeze and preview are tied to
+    /// that pawn). A browse-mode session never touched the pawn, so it stays open.
+    /// </summary>
+    private void CloseLiveSession(PlayerSlot slot, CloseReason reason)
+    {
+        if (_sessions.TryGetValue(slot, out var session) && session.LivePreview)
+            CloseSession(slot, reason);
     }
 
     int IEventListener.ListenerVersion  => IEventListener.ApiVersion;
@@ -278,7 +301,7 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
     private void OnPlayerSpawnPost(IPlayerSpawnForwardParams param)
     {
         if (param.Pawn.GetController() is { } controller)
-            CloseSession(controller.PlayerSlot, CloseReason.Respawn);
+            CloseLiveSession(controller.PlayerSlot, CloseReason.Respawn);
     }
 
     // -------------------------
@@ -302,14 +325,10 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
             return ECommandAction.Handled;
         }
 
-        if (client.GetPlayerController() is not { } controller
-            || controller.Team is not (CStrikeTeam.TE or CStrikeTeam.CT)
-            || controller.GetPlayerPawn() is not { IsAlive: true })
-        {
-            client.Print(HudPrintChannel.Chat, Chat("You must be alive on a team to open the store."));
+        if (client.GetPlayerController() is null)
             return ECommandAction.Handled;
-        }
 
+        // Dead players and spectators can shop too (as with the old menu); they get browse mode.
         BeginOpen(client);
         return ECommandAction.Handled;
     }
@@ -369,7 +388,6 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
 
         if (_bridge.ClientManager.GetGameClient(slot) is not { } client
             || client.SteamId != session.SteamId
-            || GetLivePawn(slot) is not { } pawn
             || _layoutHost.GetOrCreate(client) is not { } layout
             || _bridge.PanoramaManager is not { } panorama)
         {
@@ -382,8 +400,12 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
         session.ClickLayout = layout.Entity;
         session.Open        = true;
 
+        // Live preview needs a living pawn on a team; everyone else browses without the camera.
+        var pawn = GetLivePawn(slot);
+        session.LivePreview = pawn is { Team: CStrikeTeam.TE or CStrikeTeam.CT };
+
         // No camera means no freeze: refuse rather than let a player walk around in a previewed model.
-        if (!_camera.Start(slot, pawn))
+        if (session.LivePreview && !_camera.Start(slot, pawn!))
         {
             CloseSession(slot, CloseReason.Invalid);
             PrintChat(slot, Chat("The store could not be opened right now."));
@@ -433,8 +455,13 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
 
         _camera.Stop(slot);
 
-        if (_layoutHost.TryGet(slot) is { } layout)
-            layout.Entity.SetInputCaptureEnabled(slot, false);
+        // Release the mouse first and hide the store; the entity itself is killed afterwards.
+        var detached = _layoutHost.Detach(slot);
+        if (detached is not null)
+        {
+            detached.SetInputCaptureEnabled(slot, false);
+            detached.SetClassOverride(RootPanel, "show", HudPanelClassStatus.ForceDisable);
+        }
 
         if (session.ClickLayout is { } clickLayout && _bridge.PanoramaManager is { } panorama)
         {
@@ -450,7 +477,19 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
         }
         session.ClickLayout = null;
 
-        _layoutHost.Kill(slot);
+        if (detached is not null)
+        {
+            // Unload / map change / disconnect: kill now (timers die with the module, entities with
+            // the map, and the client is gone). Otherwise give the capture release a moment to land.
+            if (reason is CloseReason.Shutdown or CloseReason.MapChange or CloseReason.Disconnect)
+                detached.AcceptInput("Kill");
+            else
+                _bridge.ModSharp.PushTimer(() =>
+                {
+                    if (detached.IsValid())
+                        detached.AcceptInput("Kill");
+                }, LayoutKillDelay);
+        }
 
         session.Pending = false;
         session.Snapshots.Clear();
@@ -497,7 +536,8 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
         if (!_sessions.TryGetValue(slot, out var session) || !session.Open)
             return;
 
-        if (_layoutHost.TryGet(slot) is not { } live || GetLivePawn(slot) is null)
+        // Browse mode has no pawn requirement; live-preview mode does (its camera orbits the pawn).
+        if (_layoutHost.TryGet(slot) is not { } live || (session.LivePreview && GetLivePawn(slot) is null))
         {
             CloseSession(slot, CloseReason.Invalid);
             return;
@@ -599,7 +639,7 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
 
     private void PreviewItem(StoreSession session, ItemDefinition item)
     {
-        if (GetLivePawn(session.Slot) is not { } pawn || _itemService.GetItemType(item.Unique) is not { } type)
+        if (!session.LivePreview || GetLivePawn(session.Slot) is not { } pawn || _itemService.GetItemType(item.Unique) is not { } type)
             return;
 
         if (!session.Snapshots.ContainsKey(type))
@@ -872,7 +912,11 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
         RenderRows(session, layout);
         RenderDetail(session, layout);
 
-        var selected = SelectedItem(session);
+        // Browse mode (dead / spectating): no camera to rotate and nothing on a pawn to preview.
+        Class(session, layout, CamControls,     "hud-hidden", !session.LivePreview);
+        Class(session, layout, PreviewOffLabel, "hud-hidden", session.LivePreview);
+
+        var selected = session.LivePreview ? SelectedItem(session) : null;
         Class(session, layout, PreviewBar, "hud-hidden", selected is null);
         if (selected is not null)
             Text(session, layout, PreviewLabel, $"Previewing {selected.Name}");

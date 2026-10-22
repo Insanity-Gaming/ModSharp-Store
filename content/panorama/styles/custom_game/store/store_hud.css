@@ -435,6 +435,17 @@
 	color: #E7EAF2;
 }
 
+.PreviewUnavailable {
+	horizontal-align: center;
+	margin-top: 14px;
+	padding: 10px 18px;
+	border-radius: 5px;
+	background-color: #12171ee8;
+	border: 1px solid #ffffff20;
+	font-size: 16px;
+	color: #8991A6;
+}
+
 .CenterSpacer {
 	height: fill-parent-flow(1.0);
 }

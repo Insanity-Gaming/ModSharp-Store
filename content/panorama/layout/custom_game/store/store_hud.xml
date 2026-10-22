@@ -99,8 +99,9 @@
 					<Panel class="CenterColumn" hittest="false">
 						<Panel id="preview_bar" class="PreviewBar hud-hidden" hittest="false"><Label id="preview_lbl" class="PreviewLabel" hittest="false" text="{s:value}" /></Panel>
 						<Panel id="toast" class="Toast" hittest="false"><Label id="toast_lbl" class="ToastLabel" hittest="false" text="{s:value}" /></Panel>
+						<Label id="preview_unavailable" class="PreviewUnavailable hud-hidden" hittest="false" text="Preview is available while you're alive on a team." />
 						<Panel class="CenterSpacer" hittest="false" />
-						<Panel class="CamControls" hittest="false">
+						<Panel id="cam_controls" class="CamControls" hittest="false">
 							<Button id="cam_left" class="CamButton"><Label class="CamLabel" hittest="false" text="◀" /></Button>
 							<Panel class="CamHint" hittest="false"><Label class="CamHintLabel" hittest="false" text="Rotate" /></Panel>
 							<Button id="cam_right" class="CamButton"><Label class="CamLabel" hittest="false" text="▶" /></Button>
