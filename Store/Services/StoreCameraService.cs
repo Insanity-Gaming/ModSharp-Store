@@ -118,7 +118,9 @@ public sealed class StoreCameraService
             if (state.Pawn.GetCameraService() is { } cameraService)
                 cameraService.ViewEntity = null;
 
-            state.Pawn.SetMoveType(state.PreviousMoveType);
+            // A dead pawn already has the move type the game set on death; don't override it.
+            if (state.Pawn.IsAlive)
+                state.Pawn.SetMoveType(state.PreviousMoveType);
         }
 
         if (state.Camera.IsValid())

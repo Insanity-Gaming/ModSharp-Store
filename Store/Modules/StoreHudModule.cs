@@ -119,6 +119,14 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
     private readonly Dictionary<PlayerSlot, StoreSession> _sessions = new();
     private readonly int[] _generations = new int[PlayerSlot.MaxPlayerCount.AsPrimitive()];
 
+    // One buy/equip in flight per player, keyed by SteamId so closing and reopening the store can't
+    // start a second purchase while the first is still awaiting the DB (PurchaseService has no lock).
+    // Touched from both the frame thread and await continuations, hence concurrent.
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<ulong, byte> _pendingActions = new();
+
+    // Types whose item count exceeded MaxRows, so the truncation warning is logged once, not per render.
+    private readonly HashSet<string> _truncationWarned = [];
+
     public StoreHudModule(
         InterfaceBridge bridge,
         IItemService itemService,
@@ -135,7 +143,8 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
     {
         _bridge           = bridge;
         _itemService      = itemService;
-        _itemTypes        = itemTypes.Take(MaxCategories).ToArray();
+        var allTypes      = itemTypes.ToArray();
+        _itemTypes        = allTypes.Take(MaxCategories).ToArray();
         _purchaseService  = purchaseService;
         _equipmentManager = equipmentManager;
         _equipmentRepo    = equipmentRepo;
@@ -148,6 +157,11 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
 
         _layoutHost   = new PlayerHudLayoutHost(bridge, logger, LayoutResource, LayoutTargetPrefix);
         _clickHandler = OnClick;
+
+        if (allTypes.Length > MaxCategories)
+            _logger.LogWarning("Store HUD shows {Max} item types; {Hidden} type(s) are not shown: {Types}",
+                MaxCategories, allTypes.Length - MaxCategories,
+                string.Join(", ", allTypes.Skip(MaxCategories).Select(t => t.TypeName)));
     }
 
     // -------------------------
@@ -198,6 +212,15 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
         _bridge.ModSharp.PrecacheResource(StyleSourcePath);
     }
 
+    // Close while the old map's entities still exist, so teardown never touches destroyed ones.
+    public void OnGameDeactivate()
+    {
+        CloseAll(CloseReason.MapChange);
+        _layoutHost.KillAll();
+        _camera.StopAll();
+    }
+
+    // Safety net for anything left over; every call here is validity-checked.
     public void OnGameActivate()
     {
         CloseAll(CloseReason.MapChange);
@@ -359,8 +382,13 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
         session.ClickLayout = layout.Entity;
         session.Open        = true;
 
+        // No camera means no freeze: refuse rather than let a player walk around in a previewed model.
         if (!_camera.Start(slot, pawn))
-            _logger.LogDebug("Store camera unavailable for slot {Slot}; opening without preview camera.", slot);
+        {
+            CloseSession(slot, CloseReason.Invalid);
+            PrintChat(slot, Chat("The store could not be opened right now."));
+            return;
+        }
 
         Render(session, layout);
         Class(session, layout, RootPanel, "show", true);
@@ -395,7 +423,14 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
         _generations[slot]++;
         session.Open = false;
 
-        RestorePreviews(session);
+        // When the game itself respawns or resets the pawn, it re-applies the equipped items; restoring
+        // the pre-store snapshot then would put last life's (possibly other team's) model back on.
+        if (reason is not (CloseReason.Death or CloseReason.Respawn or CloseReason.TeamChange
+                           or CloseReason.RoundStart or CloseReason.MapChange or CloseReason.Disconnect))
+        {
+            RestorePreviews(session);
+        }
+
         _camera.Stop(slot);
 
         if (_layoutHost.TryGet(slot) is { } layout)
@@ -514,9 +549,14 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
         // Equip opens on a category the player actually owns something in.
         if (tab == Tab.Equip && !OwnsAnyOfType(session, session.TypeIndex))
         {
-            var first = Array.FindIndex(_itemTypes, t => OwnsAnyOfType(session, Array.IndexOf(_itemTypes, t)));
-            if (first >= 0)
-                session.TypeIndex = first;
+            for (var i = 0; i < _itemTypes.Length; i++)
+            {
+                if (!OwnsAnyOfType(session, i))
+                    continue;
+
+                session.TypeIndex = i;
+                break;
+            }
         }
     }
 
@@ -574,7 +614,10 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
 
     private async Task DoBuyAsync(StoreSession session)
     {
-        if (session.Tab != Tab.Buy || session.Pending || SelectedItem(session) is not { } item)
+        if (session.Tab != Tab.Buy || SelectedItem(session) is not { } item)
+            return;
+
+        if (!_pendingActions.TryAdd(session.SteamId, 0))
             return;
 
         var slot = session.Slot;
@@ -612,6 +655,10 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
             _bridge.ModSharp.InvokeFrameAction(() =>
                 FinishAction(session, "Purchase failed. Please try again.", ToastKind.Error, clearSelection: false));
         }
+        finally
+        {
+            _pendingActions.TryRemove(session.SteamId, out _);
+        }
     }
 
     // -------------------------
@@ -620,7 +667,7 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
 
     private async Task DoTeamOptionAsync(StoreSession session, int team)
     {
-        if (session.Tab != Tab.Equip || session.Pending || SelectedItem(session) is not { } item)
+        if (session.Tab != Tab.Equip || SelectedItem(session) is not { } item)
             return;
 
         if (item.Team != 0 && item.Team != team)
@@ -635,6 +682,9 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
             return;
         }
 
+        if (!_pendingActions.TryAdd(session.SteamId, 0))
+            return;
+
         session.Pending = true;
         RenderIfOpen(session);
 
@@ -646,9 +696,7 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
             if (equipped is not null)
             {
                 success = await _equipmentManager.UnequipAsync(session.SteamId, equipped.Slot, equipped.Team);
-                message = success
-                    ? $"{item.Name} unequipped from {teamLabel}." + NextSpawnSuffix(session, team)
-                    : "Failed to unequip item.";
+                message = success ? $"{item.Name} unequipped from {teamLabel}." : "Failed to unequip item.";
             }
             else
             {
@@ -663,7 +711,9 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
                 if (success && equipped is null)
                     ApplyNowIfCurrentTeam(session.Slot, item, team, team);
 
-                FinishAction(session, message, success ? ToastKind.Ok : ToastKind.Error, clearSelection: false);
+                // Reads the live pawn, so it is built here on the frame thread, never after an await.
+                var text = success && equipped is not null ? message + NextSpawnSuffix(session, team) : message;
+                FinishAction(session, text, success ? ToastKind.Ok : ToastKind.Error, clearSelection: false);
             });
         }
         catch (Exception ex)
@@ -672,11 +722,15 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
             _bridge.ModSharp.InvokeFrameAction(() =>
                 FinishAction(session, "An error occurred while equipping. Please try again.", ToastKind.Error, clearSelection: false));
         }
+        finally
+        {
+            _pendingActions.TryRemove(session.SteamId, out _);
+        }
     }
 
     private async Task DoBothTeamsAsync(StoreSession session)
     {
-        if (session.Tab != Tab.Equip || session.Pending || SelectedItem(session) is not { Team: 0 } item)
+        if (session.Tab != Tab.Equip || SelectedItem(session) is not { Team: 0 } item)
             return;
 
         var equippedT  = session.Equipped.FirstOrDefault(e => e.Unique == item.Unique && e.Team == TeamT);
@@ -688,6 +742,9 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
             ShowToast(session, "You do not have permission to equip this item.", ToastKind.Error);
             return;
         }
+
+        if (!_pendingActions.TryAdd(session.SteamId, 0))
+            return;
 
         session.Pending = true;
         RenderIfOpen(session);
@@ -709,7 +766,7 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
             var success = tSuccess && ctSuccess;
             var message = (unequip, success) switch
             {
-                (true, true)   => $"{item.Name} unequipped from both teams." + NextSpawnSuffix(session, null),
+                (true, true)   => $"{item.Name} unequipped from both teams.",
                 (true, false)  => "Failed to unequip item.",
                 (false, true)  => $"{item.Name} equipped for both teams!",
                 (false, false) => $"Failed to equip {item.Name} for both teams.",
@@ -722,7 +779,9 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
                 if (!unequip && success)
                     ApplyNowIfCurrentTeam(session.Slot, item, TeamT, TeamCT);
 
-                FinishAction(session, message, success ? ToastKind.Ok : ToastKind.Error, clearSelection: false);
+                // Reads the live pawn, so it is built here on the frame thread, never after an await.
+                var text = unequip && success ? message + NextSpawnSuffix(session, null) : message;
+                FinishAction(session, text, success ? ToastKind.Ok : ToastKind.Error, clearSelection: false);
             });
         }
         catch (Exception ex)
@@ -730,6 +789,10 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
             _logger.LogError(ex, "Store equip-both failed for {SteamId} item '{Unique}'", session.SteamId, item.Unique);
             _bridge.ModSharp.InvokeFrameAction(() =>
                 FinishAction(session, "An error occurred while equipping. Please try again.", ToastKind.Error, clearSelection: false));
+        }
+        finally
+        {
+            _pendingActions.TryRemove(session.SteamId, out _);
         }
     }
 
@@ -843,11 +906,12 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
         var type  = CurrentType(session);
         var items = type is null ? [] : SortedItems(session, type, buy);
 
-        if (items.Count > MaxRows)
-            _logger.LogWarning("Store type {Type} has {Count} items; only the first {Max} are shown.", type!.TypeName, items.Count, MaxRows);
+        if (items.Count > MaxRows && _truncationWarned.Add(type!.TypeName))
+            _logger.LogWarning("Store type {Type} has {Count} items; only the first {Max} are shown.", type.TypeName, items.Count, MaxRows);
 
+        var shown = items.Take(MaxRows).ToList();
         session.Rows.Clear();
-        session.Rows.AddRange(items.Take(MaxRows));
+        session.Rows.AddRange(shown.Select(r => r.Item));
 
         Text(session, layout, ListTitleLabel, type is null ? string.Empty : FormatTypeName(type.TypeName));
         Text(session, layout, ListSubLabel, buy ? $"{session.Rows.Count} to buy" : $"{session.Rows.Count} owned");
@@ -864,8 +928,7 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
                 continue;
             }
 
-            var item   = session.Rows[i];
-            var locked = IsLocked(session.Slot, item);
+            var (item, locked) = shown[i];
 
             Class(session, layout, id, "hud-hidden", false);
             Class(session, layout, id, "sel", item.Unique == session.Selected);
@@ -1031,12 +1094,16 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
         => index >= 0 && index < _itemTypes.Length
            && _itemService.GetBySlot(_itemTypes[index].Slot).Any(i => session.OwnedUniques.Contains(i.Unique));
 
-    /// <summary>Buy: unowned items. Equip: owned items. Both: locked first, then price descending (as the old menu).</summary>
-    private List<ItemDefinition> SortedItems(StoreSession session, IItemType type, bool buy)
+    /// <summary>
+    /// Buy: unowned items. Equip: owned items. Both: locked first, then price descending (as the old
+    /// menu). The permission check runs once per item per render and is returned alongside the item.
+    /// </summary>
+    private List<(ItemDefinition Item, bool Locked)> SortedItems(StoreSession session, IItemType type, bool buy)
         => _itemService.GetBySlot(type.Slot)
                        .Where(i => buy ? !session.OwnedUniques.Contains(i.Unique) : session.OwnedUniques.Contains(i.Unique))
-                       .OrderBy(i => i.Permission is null || HasPermission(session.Slot, i.Permission) ? 1 : 0)
-                       .ThenByDescending(i => i.Price)
+                       .Select(i => (Item: i, Locked: IsLocked(session.Slot, i)))
+                       .OrderBy(r => r.Locked ? 0 : 1)
+                       .ThenByDescending(r => r.Item.Price)
                        .ToList();
 
     private List<IItemType> VisibilityTypes()
