@@ -42,7 +42,9 @@ Precache uses the source paths (`.vxml` / `.vcss`).
 - The outermost panel under `<root>` has no `id` (compile error); `store_root` sits inside it.
 - Every panel the server drives needs an `id`. Never style a server-driven panel by `#id` — an id
   selector beats the runtime class overrides.
-- Labels take only `id`, `class`, `hittest` and `text` (no `html=` until it is proven in-game).
+- Labels take only `id`, `class`, `hittest` and `text`. A build with `html="true"` on four labels
+  (plus apostrophes in comments) compiled cleanly but rendered no HUD at all in-game; removing
+  them fixed it. Treat anything outside the baseline as a layout-breaking risk.
 - State is classes only: `show`, `hud-hidden`, `on`, `open`, `sel`, `disabled`, `chip-price`,
   `chip-locked`, `chip-short`, `toast-ok|err|info`. Text is `{s:value}` on labels.
 - CSS: `px`/`%`, `s`/`ms`, `deg` only; `flow-children` instead of flex; `visibility: collapse` to
