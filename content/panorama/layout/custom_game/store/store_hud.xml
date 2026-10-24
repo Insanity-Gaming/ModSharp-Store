@@ -23,25 +23,19 @@
 
 			<Panel class="Body" hittest="false">
 
-				<!-- Shop (Buy / Equip): category strip + scrolling rows | live model | detail -->
+				<!-- Shop (Buy / Equip): sections | preview model | detail. Open header and those above it use sec_ slots, the rest use secb_ slots below the rows -->
 				<Panel id="shop_view" class="ShopView" hittest="false">
 					<Panel class="LeftColumn" hittest="false">
-						<Panel class="CatStrip" hittest="false">
-							<Button id="cat_0" class="CatButton hud-hidden"><Panel id="cat_0_icon" class="CatIcon" hittest="false" /><Label id="cat_0_lbl" class="CatLabel" hittest="false" text="{s:value}" /></Button>
-							<Button id="cat_1" class="CatButton hud-hidden"><Panel id="cat_1_icon" class="CatIcon" hittest="false" /><Label id="cat_1_lbl" class="CatLabel" hittest="false" text="{s:value}" /></Button>
-							<Button id="cat_2" class="CatButton hud-hidden"><Panel id="cat_2_icon" class="CatIcon" hittest="false" /><Label id="cat_2_lbl" class="CatLabel" hittest="false" text="{s:value}" /></Button>
-							<Button id="cat_3" class="CatButton hud-hidden"><Panel id="cat_3_icon" class="CatIcon" hittest="false" /><Label id="cat_3_lbl" class="CatLabel" hittest="false" text="{s:value}" /></Button>
-							<Button id="cat_4" class="CatButton hud-hidden"><Panel id="cat_4_icon" class="CatIcon" hittest="false" /><Label id="cat_4_lbl" class="CatLabel" hittest="false" text="{s:value}" /></Button>
-							<Button id="cat_5" class="CatButton hud-hidden"><Panel id="cat_5_icon" class="CatIcon" hittest="false" /><Label id="cat_5_lbl" class="CatLabel" hittest="false" text="{s:value}" /></Button>
-							<Button id="cat_6" class="CatButton hud-hidden"><Panel id="cat_6_icon" class="CatIcon" hittest="false" /><Label id="cat_6_lbl" class="CatLabel" hittest="false" text="{s:value}" /></Button>
-							<Button id="cat_7" class="CatButton hud-hidden"><Panel id="cat_7_icon" class="CatIcon" hittest="false" /><Label id="cat_7_lbl" class="CatLabel" hittest="false" text="{s:value}" /></Button>
-						</Panel>
 						<Panel class="ListPanel" hittest="false">
-							<Panel class="ListHeader" hittest="false">
-								<Label id="list_title" class="ListTitle" hittest="false" text="{s:value}" />
-								<Label id="list_sub" class="ListSub" hittest="false" text="{s:value}" />
-							</Panel>
-							<Panel class="ListScroll">
+							<Button id="sec_0" class="SectionHeader hud-hidden"><Label id="sec_0_arrow" class="SectionArrow" hittest="false" text="{s:value}" /><Label id="sec_0_lbl" class="SectionName" hittest="false" text="{s:value}" /><Label id="sec_0_count" class="SectionCount" hittest="false" text="{s:value}" /></Button>
+							<Button id="sec_1" class="SectionHeader hud-hidden"><Label id="sec_1_arrow" class="SectionArrow" hittest="false" text="{s:value}" /><Label id="sec_1_lbl" class="SectionName" hittest="false" text="{s:value}" /><Label id="sec_1_count" class="SectionCount" hittest="false" text="{s:value}" /></Button>
+							<Button id="sec_2" class="SectionHeader hud-hidden"><Label id="sec_2_arrow" class="SectionArrow" hittest="false" text="{s:value}" /><Label id="sec_2_lbl" class="SectionName" hittest="false" text="{s:value}" /><Label id="sec_2_count" class="SectionCount" hittest="false" text="{s:value}" /></Button>
+							<Button id="sec_3" class="SectionHeader hud-hidden"><Label id="sec_3_arrow" class="SectionArrow" hittest="false" text="{s:value}" /><Label id="sec_3_lbl" class="SectionName" hittest="false" text="{s:value}" /><Label id="sec_3_count" class="SectionCount" hittest="false" text="{s:value}" /></Button>
+							<Button id="sec_4" class="SectionHeader hud-hidden"><Label id="sec_4_arrow" class="SectionArrow" hittest="false" text="{s:value}" /><Label id="sec_4_lbl" class="SectionName" hittest="false" text="{s:value}" /><Label id="sec_4_count" class="SectionCount" hittest="false" text="{s:value}" /></Button>
+							<Button id="sec_5" class="SectionHeader hud-hidden"><Label id="sec_5_arrow" class="SectionArrow" hittest="false" text="{s:value}" /><Label id="sec_5_lbl" class="SectionName" hittest="false" text="{s:value}" /><Label id="sec_5_count" class="SectionCount" hittest="false" text="{s:value}" /></Button>
+							<Button id="sec_6" class="SectionHeader hud-hidden"><Label id="sec_6_arrow" class="SectionArrow" hittest="false" text="{s:value}" /><Label id="sec_6_lbl" class="SectionName" hittest="false" text="{s:value}" /><Label id="sec_6_count" class="SectionCount" hittest="false" text="{s:value}" /></Button>
+							<Button id="sec_7" class="SectionHeader hud-hidden"><Label id="sec_7_arrow" class="SectionArrow" hittest="false" text="{s:value}" /><Label id="sec_7_lbl" class="SectionName" hittest="false" text="{s:value}" /><Label id="sec_7_count" class="SectionCount" hittest="false" text="{s:value}" /></Button>
+							<Panel id="list_scroll" class="ListScroll">
 								<Button id="row_0" class="Row hud-hidden"><Panel class="RowTile" hittest="false"><Label id="row_0_tile" class="RowTileLabel" hittest="false" text="{s:value}" /></Panel><Panel class="RowText" hittest="false"><Label id="row_0_name" class="RowName" hittest="false" text="{s:value}" /><Label id="row_0_team" class="RowTeam" hittest="false" text="{s:value}" /></Panel><Label id="row_0_eq" class="RowEq hud-hidden" hittest="false" text="{s:value}" /><Label id="row_0_chip" class="RowChip hud-hidden" hittest="false" text="{s:value}" /></Button>
 								<Button id="row_1" class="Row hud-hidden"><Panel class="RowTile" hittest="false"><Label id="row_1_tile" class="RowTileLabel" hittest="false" text="{s:value}" /></Panel><Panel class="RowText" hittest="false"><Label id="row_1_name" class="RowName" hittest="false" text="{s:value}" /><Label id="row_1_team" class="RowTeam" hittest="false" text="{s:value}" /></Panel><Label id="row_1_eq" class="RowEq hud-hidden" hittest="false" text="{s:value}" /><Label id="row_1_chip" class="RowChip hud-hidden" hittest="false" text="{s:value}" /></Button>
 								<Button id="row_2" class="Row hud-hidden"><Panel class="RowTile" hittest="false"><Label id="row_2_tile" class="RowTileLabel" hittest="false" text="{s:value}" /></Panel><Panel class="RowText" hittest="false"><Label id="row_2_name" class="RowName" hittest="false" text="{s:value}" /><Label id="row_2_team" class="RowTeam" hittest="false" text="{s:value}" /></Panel><Label id="row_2_eq" class="RowEq hud-hidden" hittest="false" text="{s:value}" /><Label id="row_2_chip" class="RowChip hud-hidden" hittest="false" text="{s:value}" /></Button>
@@ -92,14 +86,21 @@
 								<Button id="row_47" class="Row hud-hidden"><Panel class="RowTile" hittest="false"><Label id="row_47_tile" class="RowTileLabel" hittest="false" text="{s:value}" /></Panel><Panel class="RowText" hittest="false"><Label id="row_47_name" class="RowName" hittest="false" text="{s:value}" /><Label id="row_47_team" class="RowTeam" hittest="false" text="{s:value}" /></Panel><Label id="row_47_eq" class="RowEq hud-hidden" hittest="false" text="{s:value}" /><Label id="row_47_chip" class="RowChip hud-hidden" hittest="false" text="{s:value}" /></Button>
 								<Label id="list_empty" class="ListEmpty hud-hidden" hittest="false" text="{s:value}" />
 							</Panel>
+							<Button id="secb_0" class="SectionHeader hud-hidden"><Label id="secb_0_arrow" class="SectionArrow" hittest="false" text="{s:value}" /><Label id="secb_0_lbl" class="SectionName" hittest="false" text="{s:value}" /><Label id="secb_0_count" class="SectionCount" hittest="false" text="{s:value}" /></Button>
+							<Button id="secb_1" class="SectionHeader hud-hidden"><Label id="secb_1_arrow" class="SectionArrow" hittest="false" text="{s:value}" /><Label id="secb_1_lbl" class="SectionName" hittest="false" text="{s:value}" /><Label id="secb_1_count" class="SectionCount" hittest="false" text="{s:value}" /></Button>
+							<Button id="secb_2" class="SectionHeader hud-hidden"><Label id="secb_2_arrow" class="SectionArrow" hittest="false" text="{s:value}" /><Label id="secb_2_lbl" class="SectionName" hittest="false" text="{s:value}" /><Label id="secb_2_count" class="SectionCount" hittest="false" text="{s:value}" /></Button>
+							<Button id="secb_3" class="SectionHeader hud-hidden"><Label id="secb_3_arrow" class="SectionArrow" hittest="false" text="{s:value}" /><Label id="secb_3_lbl" class="SectionName" hittest="false" text="{s:value}" /><Label id="secb_3_count" class="SectionCount" hittest="false" text="{s:value}" /></Button>
+							<Button id="secb_4" class="SectionHeader hud-hidden"><Label id="secb_4_arrow" class="SectionArrow" hittest="false" text="{s:value}" /><Label id="secb_4_lbl" class="SectionName" hittest="false" text="{s:value}" /><Label id="secb_4_count" class="SectionCount" hittest="false" text="{s:value}" /></Button>
+							<Button id="secb_5" class="SectionHeader hud-hidden"><Label id="secb_5_arrow" class="SectionArrow" hittest="false" text="{s:value}" /><Label id="secb_5_lbl" class="SectionName" hittest="false" text="{s:value}" /><Label id="secb_5_count" class="SectionCount" hittest="false" text="{s:value}" /></Button>
+							<Button id="secb_6" class="SectionHeader hud-hidden"><Label id="secb_6_arrow" class="SectionArrow" hittest="false" text="{s:value}" /><Label id="secb_6_lbl" class="SectionName" hittest="false" text="{s:value}" /><Label id="secb_6_count" class="SectionCount" hittest="false" text="{s:value}" /></Button>
+							<Button id="secb_7" class="SectionHeader hud-hidden"><Label id="secb_7_arrow" class="SectionArrow" hittest="false" text="{s:value}" /><Label id="secb_7_lbl" class="SectionName" hittest="false" text="{s:value}" /><Label id="secb_7_count" class="SectionCount" hittest="false" text="{s:value}" /></Button>
 						</Panel>
 					</Panel>
 
-					<!-- Centre is left clear for the live player model (third-person store camera) -->
+					<!-- Centre is left clear for the store preview model -->
 					<Panel class="CenterColumn" hittest="false">
 						<Panel id="preview_bar" class="PreviewBar hud-hidden" hittest="false"><Label id="preview_lbl" class="PreviewLabel" hittest="false" text="{s:value}" /></Panel>
 						<Panel id="toast" class="Toast" hittest="false"><Label id="toast_lbl" class="ToastLabel" hittest="false" text="{s:value}" /></Panel>
-						<Label id="preview_unavailable" class="PreviewUnavailable hud-hidden" hittest="false" text="Preview is available while you're alive on a team." />
 						<Panel class="CenterSpacer" hittest="false" />
 						<Panel id="cam_controls" class="CamControls" hittest="false">
 							<Button id="cam_left" class="CamButton"><Label class="CamLabel" hittest="false" text="◀" /></Button>
@@ -115,14 +116,18 @@
 							<Label class="DetailKicker" hittest="false" text="BUY" />
 							<Label id="buy_name" class="DetailName" hittest="false" text="{s:value}" />
 							<Label id="buy_meta" class="DetailMeta" hittest="false" text="{s:value}" />
+							<Label id="buy_desc" class="DetailDesc hud-hidden" hittest="false" text="{s:value}" />
+							<Label id="buy_blocked" class="DetailBlocked hud-hidden" hittest="false" text="{s:value}" />
 							<Panel class="DetailSpacer" hittest="false" />
 							<Label id="buy_question" class="DetailQuestion" hittest="false" text="{s:value}" />
-							<Button id="buy_confirm" class="PrimaryButton"><Label class="PrimaryLabel" hittest="false" text="CONFIRM PURCHASE" /></Button>
+							<Button id="buy_confirm" class="PrimaryButton"><Label id="buy_confirm_lbl" class="PrimaryLabel" hittest="false" text="{s:value}" /></Button>
 						</Panel>
 
 						<Panel id="detail_equip" class="Detail hud-hidden" hittest="false">
 							<Label class="DetailKicker" hittest="false" text="EQUIP" />
 							<Label id="equip_name" class="DetailName" hittest="false" text="{s:value}" />
+							<Label id="equip_desc" class="DetailDesc hud-hidden" hittest="false" text="{s:value}" />
+							<Label id="equip_blocked" class="DetailBlocked hud-hidden" hittest="false" text="{s:value}" />
 							<Panel class="DetailSpacer" hittest="false" />
 							<Button id="team_t" class="TeamOption hud-hidden"><Label class="TeamLabel" hittest="false" text="Terrorists" /><Label id="team_t_eq" class="TeamEquipped hud-hidden" hittest="false" text="[EQUIPPED]" /></Button>
 							<Button id="team_ct" class="TeamOption hud-hidden"><Label class="TeamLabel" hittest="false" text="Counter-Terrorists" /><Label id="team_ct_eq" class="TeamEquipped hud-hidden" hittest="false" text="[EQUIPPED]" /></Button>

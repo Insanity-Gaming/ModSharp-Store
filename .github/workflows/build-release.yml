@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: write
+  packages: read
 
 jobs:
   build:
@@ -26,6 +27,10 @@ jobs:
 
       - name: Restore
         run: dotnet restore
+        env:
+          # InsanityGaming.* packages come from the org's GitHub Packages feed (nuget.config)
+          GITHUB_PACKAGES_USER: ${{ github.actor }}
+          GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build
         run: |

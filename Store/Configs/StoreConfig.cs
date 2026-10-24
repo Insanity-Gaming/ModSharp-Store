@@ -18,6 +18,9 @@ public class StoreConfig : IConfig
 
     public List<string> EnabledItems { get; set; } = [];
 
+    // Animation the store preview model plays. Empty leaves the model in its default pose.
+    public string PreviewAnimation { get; set; } = "";
+
     // Flag/permission → credit multiplier. Highest matching flag wins.
     public Dictionary<string, float> FlagMultipliers { get; set; } = new();
 }

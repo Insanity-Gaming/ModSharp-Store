@@ -1,3 +1,4 @@
+using InsanityGaming.HudArbiter.Shared;
 using InsanityGaming.Store.Hud;
 using InsanityGaming.Store.Interfaces;
 using InsanityGaming.Store.Items;
@@ -29,7 +30,7 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
     private const string LayoutTargetPrefix  = "store_hud";
 
     private const int    MaxRows             = 48;
-    private const int    MaxCategories       = 8;
+    private const int    MaxSections         = 8;
     private const int    MaxSettings         = 8;
     private const double InputCaptureDelay   = 0.1;
     private const double ToastSeconds        = 2.8;
@@ -42,24 +43,32 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
     private const string CreditsLabel     = "credits_lbl";
     private const string ShopView         = "shop_view";
     private const string SettingsView     = "settings_view";
-    private const string ListTitleLabel   = "list_title";
-    private const string ListSubLabel     = "list_sub";
+    private const string ListScroll       = "list_scroll";
     private const string ListEmptyLabel   = "list_empty";
     private const string DetailNone       = "detail_none";
     private const string DetailBuy        = "detail_buy";
     private const string BuyNameLabel     = "buy_name";
     private const string BuyMetaLabel     = "buy_meta";
+    private const string BuyDescLabel     = "buy_desc";
+    private const string BuyBlockedLabel  = "buy_blocked";
     private const string BuyQuestionLabel = "buy_question";
     private const string BuyConfirm       = "buy_confirm";
+    private const string BuyConfirmLabel  = "buy_confirm_lbl";
     private const string DetailEquip      = "detail_equip";
     private const string EquipNameLabel   = "equip_name";
+    private const string EquipDescLabel   = "equip_desc";
+    private const string EquipBlockedLabel = "equip_blocked";
     private const string PreviewBar       = "preview_bar";
     private const string PreviewLabel     = "preview_lbl";
     private const string ToastPanel       = "toast";
     private const string ToastLabel       = "toast_lbl";
     private const string SettingsEmpty    = "settings_empty";
     private const string CamControls      = "cam_controls";
-    private const string PreviewOffLabel  = "preview_unavailable";
+
+    // Section header slots: sec_N sit above the item list, secb_N below it (see store_hud.xml).
+    private const string SectionAbovePrefix = "sec_";
+    private const string SectionBelowPrefix = "secb_";
+    private const string ConfirmPurchaseText = "CONFIRM PURCHASE";
 
     // Delay between releasing input capture and killing the entity on a normal close, so the client
     // has processed the capture release before the layout that owns it disappears.
@@ -68,12 +77,12 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
     private static readonly string[] TabIds  = ["tab_buy", "tab_equip", "tab_settings"];
     private static readonly string[] TeamIds = ["team_t", "team_ct", "team_both"];
     private static readonly string[] ToastClasses = ["toast-ok", "toast-err", "toast-info"];
-    private static readonly string[] ChipClasses  = ["chip-price", "chip-locked"];
+    private static readonly string[] ChipClasses  = ["chip-price", "chip-locked", "chip-short"];
 
     private enum Tab { Buy, Equip, Settings }
     private enum ToastKind { Ok, Error, Info }
 
-    public enum CloseReason { Closed, Toggle, Death, TeamChange, Respawn, RoundStart, Disconnect, MapChange, Shutdown, ConfigReload, Invalid }
+    public enum CloseReason { Closed, Toggle, Death, TeamChange, Respawn, RoundStart, Disconnect, MapChange, Shutdown, ConfigReload, Invalid, HudPreempted }
 
     private sealed class StoreSession
     {
@@ -85,13 +94,15 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
         public bool Open { get; set; }
 
         public Tab     Tab       { get; set; } = Tab.Buy;
+        /// <summary>Index of the open category section; -1 when every section is collapsed.</summary>
         public int     TypeIndex { get; set; }
         public string? Selected  { get; set; }
         public bool    Pending   { get; set; }
 
         /// <summary>
-        /// True when the player was alive on T/CT at open: third-person camera, freeze and live
-        /// preview. False is browse mode (dead / spectating): the full store, no pawn involved.
+        /// True when the preview model is running: the viewer (living pawn, or the observer of a
+        /// dead or spectating player) is held in place in front of it. False is browse mode, the
+        /// fallback when no preview could be started for a dead or spectating player.
         /// </summary>
         public bool    LivePreview { get; set; }
 
@@ -100,9 +111,6 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
 
         /// <summary>Items currently shown in row_0..row_n, in row order.</summary>
         public List<ItemDefinition> Rows { get; } = [];
-
-        /// <summary>Pre-store pawn state per item type, captured on first preview of that type.</summary>
-        public Dictionary<IItemType, object?> Snapshots { get; } = [];
 
         public ICustomHudLayout? ClickLayout     { get; set; }
         public int               ToastGeneration { get; set; }
@@ -121,8 +129,9 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
     private readonly IInventoryRepository _inventoryRepo;
     private readonly ICredits _credits;
     private readonly AdminManagerHolder _adminManager;
-    private readonly StoreCameraService _camera;
+    private readonly StorePreviewService _preview;
     private readonly VisibilityPreferences _visibility;
+    private readonly HudArbiterHolder _hudArbiter;
     private readonly ILogger<StoreHudModule> _logger;
 
     private readonly PlayerHudLayoutHost _layoutHost;
@@ -149,31 +158,33 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
         IInventoryRepository inventoryRepo,
         ICredits credits,
         AdminManagerHolder adminManager,
-        StoreCameraService camera,
+        StorePreviewService preview,
         VisibilityPreferences visibility,
+        HudArbiterHolder hudArbiter,
         ILogger<StoreHudModule> logger)
     {
         _bridge           = bridge;
         _itemService      = itemService;
         var allTypes      = itemTypes.ToArray();
-        _itemTypes        = allTypes.Take(MaxCategories).ToArray();
+        _itemTypes        = allTypes.Take(MaxSections).ToArray();
         _purchaseService  = purchaseService;
         _equipmentManager = equipmentManager;
         _equipmentRepo    = equipmentRepo;
         _inventoryRepo    = inventoryRepo;
         _credits          = credits;
         _adminManager     = adminManager;
-        _camera           = camera;
+        _preview          = preview;
         _visibility       = visibility;
+        _hudArbiter       = hudArbiter;
         _logger           = logger;
 
         _layoutHost   = new PlayerHudLayoutHost(bridge, logger, LayoutResource, LayoutTargetPrefix);
         _clickHandler = OnClick;
 
-        if (allTypes.Length > MaxCategories)
+        if (allTypes.Length > MaxSections)
             _logger.LogWarning("Store HUD shows {Max} item types; {Hidden} type(s) are not shown: {Types}",
-                MaxCategories, allTypes.Length - MaxCategories,
-                string.Join(", ", allTypes.Skip(MaxCategories).Select(t => t.TypeName)));
+                MaxSections, allTypes.Length - MaxSections,
+                string.Join(", ", allTypes.Skip(MaxSections).Select(t => t.TypeName)));
     }
 
     // -------------------------
@@ -182,6 +193,7 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
 
     public bool Init()
     {
+        _hudArbiter.MenuStateChanged += OnMenuStateChanged;
         _bridge.ClientManager.InstallCommandCallback("store", OnStoreCommand);
         _bridge.ClientManager.InstallCommandCallback("shop",  OnStoreCommand);
         _bridge.ClientManager.InstallClientListener(this);
@@ -200,8 +212,9 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
     {
         CloseAll(CloseReason.Shutdown);
         _layoutHost.KillAll();
-        _camera.StopAll();
+        _preview.StopAll();
 
+        _hudArbiter.MenuStateChanged -= OnMenuStateChanged;
         _bridge.ClientManager.RemoveCommandCallback("store", OnStoreCommand);
         _bridge.ClientManager.RemoveCommandCallback("shop",  OnStoreCommand);
         _bridge.ClientManager.RemoveClientListener(this);
@@ -229,7 +242,7 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
     {
         CloseAll(CloseReason.MapChange);
         _layoutHost.KillAll();
-        _camera.StopAll();
+        _preview.StopAll();
     }
 
     // Safety net for anything left over; every call here is validity-checked.
@@ -237,7 +250,7 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
     {
         CloseAll(CloseReason.MapChange);
         _layoutHost.KillAll();
-        _camera.StopAll();
+        _preview.StopAll();
     }
 
     int IGameListener.ListenerVersion  => IGameListener.ApiVersion;
@@ -251,7 +264,7 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
     {
         CloseSession(client.Slot, CloseReason.Disconnect);
         _layoutHost.Kill(client.Slot);
-        _camera.Stop(client.Slot);
+        _preview.Stop(client.Slot);
     }
 
     public void OnClientDisconnected(IGameClient client, NetworkDisconnectionReason reason)
@@ -286,7 +299,7 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
     }
 
     /// <summary>
-    /// Pawn lifecycle events only end live-preview sessions (camera, freeze and preview are tied to
+    /// Pawn lifecycle events only end live-preview sessions (preview model and freeze are tied to
     /// that pawn). A browse-mode session never touched the pawn, so it stays open.
     /// </summary>
     private void CloseLiveSession(PlayerSlot slot, CloseReason reason)
@@ -328,9 +341,28 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
         if (client.GetPlayerController() is null)
             return ECommandAction.Handled;
 
+        // Another plugin's screen (e.g. a map vote) may own the mouse or the screen right now.
+        var claim = _hudArbiter.ActivateMenu(client.Slot);
+        if (!claim.Granted)
+        {
+            client.Print(HudPrintChannel.Chat,
+                Chat($"You can't open the store while the {claim.BlockedByDisplayName ?? "current screen"} is open."));
+            return ECommandAction.Handled;
+        }
+
         // Dead players and spectators can shop too (as with the old menu); they get browse mode.
         BeginOpen(client);
         return ECommandAction.Handled;
+    }
+
+    /// <summary>HudArbiter: a higher-priority screen needs the mouse or the screen, so the store closes.</summary>
+    private void OnMenuStateChanged(PlayerSlot slot, HudElementState state, string? blockedBy)
+    {
+        if (state == HudElementState.Visible || !_sessions.ContainsKey(slot))
+            return;
+
+        CloseSession(slot, CloseReason.HudPreempted);
+        PrintChat(slot, Chat($"The store was closed for the {blockedBy ?? "current screen"}."));
     }
 
     // -------------------------
@@ -400,17 +432,25 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
         session.ClickLayout = layout.Entity;
         session.Open        = true;
 
-        // Live preview needs a living pawn on a team; everyone else browses without the camera.
-        var pawn = GetLivePawn(slot);
-        session.LivePreview = pawn is { Team: CStrikeTeam.TE or CStrikeTeam.CT };
+        // Everyone previews: a living pawn on a team, or the observer of a dead / spectating player.
+        var livePawn = GetLivePawn(slot);
+        IBasePlayerPawn? viewer = livePawn is { Team: CStrikeTeam.TE or CStrikeTeam.CT } ? livePawn : GetObserverPawn(slot);
+        var team     = StoreItemRules.PreviewTeam(ControllerTeam(slot), 0);
 
-        // No camera means no freeze: refuse rather than let a player walk around in a previewed model.
-        if (session.LivePreview && !_camera.Start(slot, pawn!))
+        session.LivePreview = viewer is not null
+                              && _preview.Start(slot, viewer, FallbackPreviewModel(session, team));
+
+        // A living player who can't be frozen in front of a preview must not walk around in a live
+        // store; a dead or spectating player falls back to browse mode instead.
+        if (!session.LivePreview && viewer is not null && viewer == livePawn)
         {
             CloseSession(slot, CloseReason.Invalid);
             PrintChat(slot, Chat("The store could not be opened right now."));
             return;
         }
+
+        if (session.LivePreview)
+            ShowEquippedOnPreview(session, team);
 
         Render(session, layout);
         Class(session, layout, RootPanel, "show", true);
@@ -433,7 +473,7 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
     // -------------------------
 
     /// <summary>
-    /// Idempotent. Restores the preview, the camera, movement and the mouse, removes the click
+    /// Idempotent. Removes the preview model, restores movement and the mouse, removes the click
     /// callback and the HUD entity, and drops all per-slot state. Safe with a dead or missing pawn.
     /// </summary>
     public void CloseSession(PlayerSlot slot, CloseReason reason)
@@ -441,19 +481,13 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
         if (!_sessions.Remove(slot, out var session))
             return;
 
+        _hudArbiter.DeactivateMenu(slot);
+
         // Bump the generation so any in-flight async continuation or toast timer becomes a no-op.
         _generations[slot]++;
         session.Open = false;
 
-        // When the game itself respawns or resets the pawn, it re-applies the equipped items; restoring
-        // the pre-store snapshot then would put last life's (possibly other team's) model back on.
-        if (reason is not (CloseReason.Death or CloseReason.Respawn or CloseReason.TeamChange
-                           or CloseReason.RoundStart or CloseReason.MapChange or CloseReason.Disconnect))
-        {
-            RestorePreviews(session);
-        }
-
-        _camera.Stop(slot);
+        _preview.Stop(slot);
 
         // Release the mouse first and hide the store; the entity itself is killed afterwards.
         var detached = _layoutHost.Detach(slot);
@@ -492,7 +526,6 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
         }
 
         session.Pending = false;
-        session.Snapshots.Clear();
         session.TextCache.Clear();
         session.ClassCache.Clear();
         session.Rows.Clear();
@@ -506,26 +539,6 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
             CloseSession(slot, reason);
     }
 
-    /// <summary>
-    /// Puts each previewed type back: the item equipped for the pawn's current team if there is
-    /// one (this includes an item equipped during this session), otherwise the pre-store snapshot.
-    /// </summary>
-    private void RestorePreviews(StoreSession session)
-    {
-        if (session.Snapshots.Count == 0 || GetLivePawn(session.Slot) is not { } pawn)
-            return;
-
-        var team = (int)pawn.Team;
-        foreach (var (type, snapshot) in session.Snapshots)
-        {
-            var equipped = session.Equipped.FirstOrDefault(e => e.Slot == type.Slot && e.Team == team);
-            if (equipped is not null && _itemService.GetByUnique(equipped.Unique) is { } item)
-                type.Preview(pawn, item);
-            else
-                type.Restore(pawn, snapshot);
-        }
-    }
-
     // -------------------------
     // Clicks
     // -------------------------
@@ -536,8 +549,8 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
         if (!_sessions.TryGetValue(slot, out var session) || !session.Open)
             return;
 
-        // Browse mode has no pawn requirement; live-preview mode does (its camera orbits the pawn).
-        if (_layoutHost.TryGet(slot) is not { } live || (session.LivePreview && GetLivePawn(slot) is null))
+        // Browse mode has no pawn requirement; live-preview mode needs its preview model and viewer.
+        if (_layoutHost.TryGet(slot) is not { } live || (session.LivePreview && !_preview.IsActive(slot)))
         {
             CloseSession(slot, CloseReason.Invalid);
             return;
@@ -554,10 +567,10 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
             case "tab_settings": SwitchTab(session, Tab.Settings); break;
 
             case "cam_left":
-                if (!_camera.Rotate(slot, -1)) _logger.LogDebug("Store camera rotate ignored for slot {Slot}", slot);
+                if (!_preview.Rotate(slot, -1)) _logger.LogDebug("Store preview rotate ignored for slot {Slot}", slot);
                 return;
             case "cam_right":
-                if (!_camera.Rotate(slot, 1)) _logger.LogDebug("Store camera rotate ignored for slot {Slot}", slot);
+                if (!_preview.Rotate(slot, 1)) _logger.LogDebug("Store preview rotate ignored for slot {Slot}", slot);
                 return;
 
             case BuyConfirm:
@@ -569,8 +582,10 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
             case "team_both": _ = DoBothTeamsAsync(session);          return;
 
             default:
-                if (TryParseIndex(buttonId, "cat_", out var cat))
-                    SelectCategory(session, cat);
+                if (TryParseIndex(buttonId, SectionBelowPrefix, out var below))
+                    ToggleSection(session, below);
+                else if (TryParseIndex(buttonId, SectionAbovePrefix, out var above))
+                    ToggleSection(session, above);
                 else if (TryParseIndex(buttonId, "row_", out var row))
                     SelectRow(session, row);
                 else if (TryParseIndex(buttonId, "set_", out var setting))
@@ -585,42 +600,26 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
     {
         session.Tab      = tab;
         session.Selected = null;
-
-        // Equip opens on a category the player actually owns something in.
-        if (tab == Tab.Equip && !OwnsAnyOfType(session, session.TypeIndex))
-        {
-            for (var i = 0; i < _itemTypes.Length; i++)
-            {
-                if (!OwnsAnyOfType(session, i))
-                    continue;
-
-                session.TypeIndex = i;
-                break;
-            }
-        }
     }
 
-    private void SelectCategory(StoreSession session, int index)
+    /// <summary>Opens the section, or collapses it when it is already the open one.</summary>
+    private void ToggleSection(StoreSession session, int index)
     {
         if (index < 0 || index >= _itemTypes.Length)
             return;
 
-        if (session.Tab == Tab.Equip && !OwnsAnyOfType(session, index))
-            return;
-
-        session.TypeIndex = index;
+        session.TypeIndex = session.TypeIndex == index ? -1 : index;
         session.Selected  = null;
     }
 
+    // Every row previews, including locked and unaffordable ones; the detail panel says why they
+    // can't be bought or equipped.
     private void SelectRow(StoreSession session, int index)
     {
         if (index < 0 || index >= session.Rows.Count)
             return;
 
         var item = session.Rows[index];
-        if (IsLocked(session.Slot, item))
-            return;
-
         session.Selected = item.Unique;
         PreviewItem(session, item);
     }
@@ -637,15 +636,33 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
             ShowToast(session, "Settings could not be saved right now.", ToastKind.Error);
     }
 
+    /// <summary>
+    /// Dresses the freshly spawned preview model in the items equipped for <paramref name="team"/>.
+    /// The store's equipment is the source of truth: a pawn's skin can't be read back from the game.
+    /// </summary>
+    private void ShowEquippedOnPreview(StoreSession session, int team)
+    {
+        foreach (var equipped in session.Equipped.Where(e => e.Team == team))
+        {
+            if (_itemService.GetByUnique(equipped.Unique) is not { } item
+                || _itemService.GetItemType(item.Unique) is not { } type)
+                continue;
+
+            if (!_preview.Show(session.Slot, type, item, team))
+                _logger.LogDebug("Equipped item {Unique} not shown on the store preview for slot {Slot}", item.Unique, session.Slot);
+        }
+    }
+
     private void PreviewItem(StoreSession session, ItemDefinition item)
     {
-        if (!session.LivePreview || GetLivePawn(session.Slot) is not { } pawn || _itemService.GetItemType(item.Unique) is not { } type)
+        if (!session.LivePreview || _itemService.GetItemType(item.Unique) is not { } type)
             return;
 
-        if (!session.Snapshots.ContainsKey(type))
-            session.Snapshots[type] = type.Snapshot(pawn);
-
-        type.Preview(pawn, item);
+        // Previews only ever touch the preview model, never the pawn. A spectator sees a
+        // single-team item as that team.
+        var team = StoreItemRules.PreviewTeam(ControllerTeam(session.Slot), item.Team);
+        if (!_preview.Show(session.Slot, type, item, team))
+            _logger.LogDebug("Store preview ignored for slot {Slot}", session.Slot);
     }
 
     // -------------------------
@@ -656,6 +673,17 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
     {
         if (session.Tab != Tab.Buy || SelectedItem(session) is not { } item)
             return;
+
+        // The confirm button is disabled for these, but never trust the client's view of it.
+        switch (Availability(session, item, buying: true))
+        {
+            case ItemAvailability.Locked:
+                ShowToast(session, "You do not have permission to buy this item.", ToastKind.Error);
+                return;
+            case ItemAvailability.Unaffordable:
+                ShowToast(session, $"You need {item.Price} credits to buy {item.Name}.", ToastKind.Error);
+                return;
+        }
 
         if (!_pendingActions.TryAdd(session.SteamId, 0))
             return;
@@ -908,13 +936,12 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
             return;
         }
 
-        RenderCategories(session, layout);
+        RenderSections(session, layout);
         RenderRows(session, layout);
         RenderDetail(session, layout);
 
-        // Browse mode (dead / spectating): no camera to rotate and nothing on a pawn to preview.
-        Class(session, layout, CamControls,     "hud-hidden", !session.LivePreview);
-        Class(session, layout, PreviewOffLabel, "hud-hidden", session.LivePreview);
+        // Browse mode (dead / spectating): no preview model to rotate.
+        Class(session, layout, CamControls, "hud-hidden", !session.LivePreview);
 
         var selected = session.LivePreview ? SelectedItem(session) : null;
         Class(session, layout, PreviewBar, "hud-hidden", selected is null);
@@ -922,26 +949,41 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
             Text(session, layout, PreviewLabel, $"Previewing {selected.Name}");
     }
 
-    private void RenderCategories(StoreSession session, PrivateHudLayout layout)
+    /// <summary>
+    /// One header per item type. The open section's header and those before it use the sec_ slots
+    /// above the item list; the rest use the secb_ slots below it, so the list reads as expanded
+    /// under its own header.
+    /// </summary>
+    private void RenderSections(StoreSession session, PrivateHudLayout layout)
     {
-        for (var i = 0; i < MaxCategories; i++)
+        var buy = session.Tab == Tab.Buy;
+        var (above, _) = StoreItemRules.SplitSections(_itemTypes.Length, session.TypeIndex);
+
+        for (var i = 0; i < MaxSections; i++)
         {
-            var id = $"cat_{i}";
-            if (i >= _itemTypes.Length)
-            {
-                Class(session, layout, id, "hud-hidden", true);
-                continue;
-            }
+            var exists  = i < _itemTypes.Length;
+            var isAbove = exists && i < above.Length;
 
-            var type     = _itemTypes[i];
-            var disabled = session.Tab == Tab.Equip && !OwnsAnyOfType(session, i);
-
-            Class(session, layout, id, "hud-hidden", false);
-            Class(session, layout, id, "on", i == session.TypeIndex);
-            Class(session, layout, id, "disabled", disabled);
-            Class(session, layout, $"{id}_icon", $"icon-{type.TypeName}", true);
-            Text(session, layout, $"{id}_lbl", FormatTypeName(type.TypeName));
+            RenderSectionHeader(session, layout, $"{SectionAbovePrefix}{i}", i, exists && isAbove, buy);
+            RenderSectionHeader(session, layout, $"{SectionBelowPrefix}{i}", i, exists && !isAbove, buy);
         }
+
+        Class(session, layout, ListScroll, "hud-hidden", CurrentType(session) is null);
+    }
+
+    private void RenderSectionHeader(StoreSession session, PrivateHudLayout layout, string id, int index, bool visible, bool buy)
+    {
+        Class(session, layout, id, "hud-hidden", !visible);
+        if (!visible)
+            return;
+
+        var open  = index == session.TypeIndex;
+        var count = ListedItems(session, _itemTypes[index], buy).Count();
+
+        Class(session, layout, id, "open", open);
+        Text(session, layout, $"{id}_arrow", open ? "▾" : "▸");
+        Text(session, layout, $"{id}_lbl", FormatTypeName(_itemTypes[index].TypeName));
+        Text(session, layout, $"{id}_count", count.ToString());
     }
 
     private void RenderRows(StoreSession session, PrivateHudLayout layout)
@@ -957,11 +999,8 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
         session.Rows.Clear();
         session.Rows.AddRange(shown.Select(r => r.Item));
 
-        Text(session, layout, ListTitleLabel, type is null ? string.Empty : FormatTypeName(type.TypeName));
-        Text(session, layout, ListSubLabel, buy ? $"{session.Rows.Count} to buy" : $"{session.Rows.Count} owned");
-
         Class(session, layout, ListEmptyLabel, "hud-hidden", session.Rows.Count > 0);
-        Text(session, layout, ListEmptyLabel, buy ? "All items owned" : "None owned");
+        Text(session, layout, ListEmptyLabel, buy ? "All items owned" : "Nothing owned yet");
 
         for (var i = 0; i < MaxRows; i++)
         {
@@ -972,7 +1011,9 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
                 continue;
             }
 
-            var (item, locked) = shown[i];
+            var (item, availability) = shown[i];
+            var locked = availability == ItemAvailability.Locked;
+            var unaffordable = availability == ItemAvailability.Unaffordable;
 
             Class(session, layout, id, "hud-hidden", false);
             Class(session, layout, id, "sel", item.Unique == session.Selected);
@@ -982,7 +1023,7 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
             Text(session, layout, $"{id}_name", item.Name);
             Text(session, layout, $"{id}_team", $"[{TeamLabel(item.Team)}]");
 
-            // Right-hand chip: price (buy), permission error (locked), equipped teams (equip).
+            // Right-hand chip: price (buy; red when short), permission error (locked), equipped teams (equip).
             var equippedText = buy || locked ? string.Empty : EquippedTeamsText(session, item);
             Class(session, layout, $"{id}_eq", "hud-hidden", equippedText.Length == 0);
             Text(session, layout, $"{id}_eq", equippedText);
@@ -990,8 +1031,9 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
             var chipText = locked ? item.PermissionError ?? "Permission required" : buy ? $"{item.Price}cr" : string.Empty;
             var chipId   = $"{id}_chip";
             Class(session, layout, chipId, "hud-hidden", chipText.Length == 0);
-            Class(session, layout, chipId, ChipClasses[0], !locked);
+            Class(session, layout, chipId, ChipClasses[0], !locked && !unaffordable);
             Class(session, layout, chipId, ChipClasses[1], locked);
+            Class(session, layout, chipId, ChipClasses[2], unaffordable);
             Text(session, layout, chipId, chipText);
         }
     }
@@ -1008,30 +1050,56 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
 
         if (buy)
         {
-            Text(session, layout, BuyNameLabel, item!.Name);
+            var availability = Availability(session, item!, buying: true);
+            var credits      = _credits.GetCreditsBySlot(session.Slot);
+            var blocked      = StoreItemRules.BlockedActionText(availability, item!.Price, credits);
+
+            Text(session, layout, BuyNameLabel, item.Name);
             Text(session, layout, BuyMetaLabel, $"[{TeamLabel(item.Team)}] · {item.Price}cr");
+            RenderDescription(session, layout, BuyDescLabel, BuyBlockedLabel, item, availability);
+            Class(session, layout, BuyQuestionLabel, "hud-hidden", blocked is not null);
             Text(session, layout, BuyQuestionLabel, $"Buy {item.Name} for {item.Price}cr?");
-            Class(session, layout, BuyConfirm, "disabled", session.Pending);
+            Class(session, layout, BuyConfirm, "disabled", session.Pending || blocked is not null);
+            Text(session, layout, BuyConfirmLabel, blocked ?? ConfirmPurchaseText);
         }
 
         if (equip)
         {
+            var locked = Availability(session, item!, buying: false) == ItemAvailability.Locked;
+
             Text(session, layout, EquipNameLabel, item!.Name);
+            RenderDescription(session, layout, EquipDescLabel, EquipBlockedLabel, item,
+                locked ? ItemAvailability.Locked : ItemAvailability.Available);
 
             var eqT  = session.Equipped.Any(e => e.Unique == item.Unique && e.Team == TeamT);
             var eqCT = session.Equipped.Any(e => e.Unique == item.Unique && e.Team == TeamCT);
 
-            RenderTeamOption(session, layout, TeamIds[0], item.Team is 0 or TeamT, eqT);
-            RenderTeamOption(session, layout, TeamIds[1], item.Team is 0 or TeamCT, eqCT);
-            RenderTeamOption(session, layout, TeamIds[2], item.Team == 0, eqT && eqCT);
+            RenderTeamOption(session, layout, TeamIds[0], item.Team is 0 or TeamT, eqT, locked);
+            RenderTeamOption(session, layout, TeamIds[1], item.Team is 0 or TeamCT, eqCT, locked);
+            RenderTeamOption(session, layout, TeamIds[2], item.Team == 0, eqT && eqCT, locked);
         }
     }
 
-    private void RenderTeamOption(StoreSession session, PrivateHudLayout layout, string id, bool visible, bool equipped)
+    /// <summary>Item description, plus the permission explanation when the item is locked.</summary>
+    private static void RenderDescription(StoreSession session, PrivateHudLayout layout, string descId, string blockedId,
+        ItemDefinition item, ItemAvailability availability)
+    {
+        var description = item.Description ?? string.Empty;
+        Class(session, layout, descId, "hud-hidden", description.Length == 0);
+        Text(session, layout, descId, description);
+
+        var locked = availability == ItemAvailability.Locked;
+        Class(session, layout, blockedId, "hud-hidden", !locked);
+        Text(session, layout, blockedId, locked ? StoreItemRules.PermissionText(item) : string.Empty);
+    }
+
+    // A locked item can still be unequipped from a team it is on; only equipping it is blocked
+    // (DoTeamOptionAsync / DoBothTeamsAsync enforce the same rule server-side).
+    private void RenderTeamOption(StoreSession session, PrivateHudLayout layout, string id, bool visible, bool equipped, bool locked)
     {
         Class(session, layout, id, "hud-hidden", !visible);
         Class(session, layout, id, "on", equipped);
-        Class(session, layout, id, "disabled", session.Pending);
+        Class(session, layout, id, "disabled", session.Pending || (locked && !equipped));
         Class(session, layout, $"{id}_eq", "hud-hidden", !equipped);
     }
 
@@ -1117,8 +1185,7 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
 
     private void ApplyPlayerData(StoreSession session, (HashSet<string> Owned, List<Equipment> Equipped) data)
     {
-        // Applied even to a closing session's object; harmless, and keeps RestorePreviews accurate
-        // if the close is still running on this frame.
+        // Applied even to a closing session's object; harmless.
         session.OwnedUniques = data.Owned;
         session.Equipped     = data.Equipped;
     }
@@ -1134,21 +1201,22 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
     private ItemDefinition? SelectedItem(StoreSession session)
         => session.Selected is { } unique && _itemService.GetByUnique(unique) is { } item ? item : null;
 
-    private bool OwnsAnyOfType(StoreSession session, int index)
-        => index >= 0 && index < _itemTypes.Length
-           && _itemService.GetBySlot(_itemTypes[index].Slot).Any(i => session.OwnedUniques.Contains(i.Unique));
+    /// <summary>Buy: unowned items. Equip: owned items.</summary>
+    private IEnumerable<ItemDefinition> ListedItems(StoreSession session, IItemType type, bool buy)
+        => _itemService.GetBySlot(type.Slot)
+                       .Where(i => buy ? !session.OwnedUniques.Contains(i.Unique) : session.OwnedUniques.Contains(i.Unique));
 
     /// <summary>
-    /// Buy: unowned items. Equip: owned items. Both: locked first, then price descending (as the old
-    /// menu). The permission check runs once per item per render and is returned alongside the item.
+    /// <see cref="ListedItems"/> in display order, each with its availability. Availability is
+    /// computed per render from live credits and permissions, never cached on the session.
     /// </summary>
-    private List<(ItemDefinition Item, bool Locked)> SortedItems(StoreSession session, IItemType type, bool buy)
-        => _itemService.GetBySlot(type.Slot)
-                       .Where(i => buy ? !session.OwnedUniques.Contains(i.Unique) : session.OwnedUniques.Contains(i.Unique))
-                       .Select(i => (Item: i, Locked: IsLocked(session.Slot, i)))
-                       .OrderBy(r => r.Locked ? 0 : 1)
-                       .ThenByDescending(r => r.Item.Price)
-                       .ToList();
+    private List<(ItemDefinition Item, ItemAvailability Availability)> SortedItems(StoreSession session, IItemType type, bool buy)
+        => StoreItemRules.Order(ListedItems(session, type, buy))
+                         .Select(i => (i, Availability(session, i, buy)))
+                         .ToList();
+
+    private ItemAvailability Availability(StoreSession session, ItemDefinition item, bool buying)
+        => StoreItemRules.Evaluate(item, !IsLocked(session.Slot, item), _credits.GetCreditsBySlot(session.Slot), buying);
 
     private List<IItemType> VisibilityTypes()
         => _itemTypes.Where(t => t.VisibilityToggle is not null).Take(MaxSettings).ToList();
@@ -1181,6 +1249,25 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
            && pawn.IsValid()
             ? pawn
             : null;
+
+    private int ControllerTeam(PlayerSlot slot)
+        => (int)(_bridge.ClientManager.GetGameClient(slot)?.GetPlayerController()?.Team ?? CStrikeTeam.UnAssigned);
+
+    private IObserverPawn? GetObserverPawn(PlayerSlot slot)
+        => _bridge.ClientManager.GetGameClient(slot)?.GetPlayerController()?.GetObserverPawn() is { } observer
+           && observer.IsValid()
+            ? observer
+            : null;
+
+    /// <summary>
+    /// Model an observer's preview prop spawns with before it is dressed: the first equipped model
+    /// for <paramref name="team"/>, else the first model in the catalog. A living pawn uses its own.
+    /// </summary>
+    private string? FallbackPreviewModel(StoreSession session, int team)
+        => session.Equipped.Where(e => e.Team == team)
+                  .Select(e => _itemService.GetByUnique(e.Unique)?.Model)
+                  .Concat(_itemTypes.SelectMany(t => _itemService.GetBySlot(t.Slot)).Select(i => i.Model))
+                  .FirstOrDefault(m => !string.IsNullOrEmpty(m));
 
     // -------------------------
     // Helpers

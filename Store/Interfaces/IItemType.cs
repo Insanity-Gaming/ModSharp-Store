@@ -1,4 +1,5 @@
 using InsanityGaming.Store.Items;
+using Sharp.Shared.Enums;
 using Sharp.Shared.GameEntities;
 
 namespace InsanityGaming.Store.Interfaces;
@@ -26,12 +27,12 @@ public interface IItemType
     /// <summary>Remove this item's effect from the player pawn.</summary>
     void Unequip(IPlayerPawn pawn);
 
-    /// <summary>Apply this item's effect to the pawn immediately (store live preview / instant equip).</summary>
+    /// <summary>Apply this item's effect to the pawn immediately (instant equip from the store).</summary>
     void Preview(IPlayerPawn pawn, ItemDefinition item);
 
-    /// <summary>Capture whatever this type changes on the pawn, so a preview can be reverted.</summary>
-    object? Snapshot(IPlayerPawn pawn);
-
-    /// <summary>Revert the pawn to a state captured by <see cref="Snapshot"/>.</summary>
-    void Restore(IPlayerPawn pawn, object? snapshot);
+    /// <summary>
+    /// Show this item on the store's preview model, as it would look on a player of <paramref name="team"/>.
+    /// Must never touch the pawn.
+    /// </summary>
+    void PreviewOnModel(IBaseModelEntity model, CStrikeTeam team, ItemDefinition item);
 }

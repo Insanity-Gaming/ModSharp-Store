@@ -18,17 +18,20 @@ def const_int(name):
     return int(re.search(rf"const int\s+{name}\s*=\s*(\d+);", cs).group(1))
 
 
-max_categories, max_rows, max_settings = (const_int(n) for n in ("MaxCategories", "MaxRows", "MaxSettings"))
+max_sections, max_rows, max_settings = (const_int(n) for n in ("MaxSections", "MaxRows", "MaxSettings"))
 
 # Static ids: panel-id constants and the click/tab/team literals.
 static = set(re.findall(r'const string \w+\s*=\s*"([a-z_]+)"', cs))
 static |= set(re.findall(r'"(tab_\w+|team_\w+|cam_\w+|close)"', cs))
 static -= {"store_hud"}  # entity targetname prefix, not a panel
+static -= {"sec_", "secb_"}  # section header pool prefixes, expanded below
 
-# Pooled ids the C# builds from prefixes.
+# Pooled ids the C# builds from prefixes. Section headers have two slots per category: sec_ above
+# the item list and secb_ below it.
 pooled = set()
-for i in range(max_categories):
-    pooled |= {f"cat_{i}", f"cat_{i}_icon", f"cat_{i}_lbl"}
+for i in range(max_sections):
+    for prefix in ("sec", "secb"):
+        pooled |= {f"{prefix}_{i}"} | {f"{prefix}_{i}_{part}" for part in ("arrow", "lbl", "count")}
 for i in range(max_rows):
     pooled |= {f"row_{i}"} | {f"row_{i}_{part}" for part in ("tile", "name", "team", "eq", "chip")}
 for i in range(max_settings):

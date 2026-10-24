@@ -19,8 +19,6 @@ public class ItemPlayerModels : IItemType
     // A model is one model for everyone, so it cannot be hidden per viewer.
     public StoreVisibilityToggle? VisibilityToggle => null;
 
-    private sealed record ModelSnapshot(string? Model, Color32 Color);
-
     public ItemPlayerModels(InterfaceBridge bridge, ILogger<ItemPlayerModels> logger)
     {
         _bridge = bridge;
@@ -42,7 +40,7 @@ public class ItemPlayerModels : IItemType
             _logger.LogDebug("[{Type}] Equipping {Player} → model: {Model} skin: {Skin} color: {Color}",
                 TypeName, playerName, item.Model, item.Skin ?? "default", item.Color ?? "default");
 
-            ApplyNow(pawn, item);
+            ApplyNow(pawn, pawn.Team, item);
 
         }, 0.5f, GameTimerFlags.None);
     }
@@ -51,58 +49,43 @@ public class ItemPlayerModels : IItemType
     {
         if (string.IsNullOrEmpty(item.Model) || !pawn.IsValid()) return;
 
-        ApplyNow(pawn, item);
+        ApplyNow(pawn, pawn.Team, item);
     }
 
-    public object? Snapshot(IPlayerPawn pawn)
+    public void PreviewOnModel(IBaseModelEntity model, CStrikeTeam team, ItemDefinition item)
     {
-        if (!pawn.IsValid()) return null;
+        if (string.IsNullOrEmpty(item.Model) || !model.IsValid()) return;
 
-        var model = pawn.GetBodyComponent()
-                        .AsBodyComponentSkeletonInstance
-                        .GetSkeletonInstance()?
-                        .GetModelState()
-                        .ModelName;
-
-        return new ModelSnapshot(model, pawn.RenderColor);
+        // The previous preview's skin and colour would otherwise carry over to an item without them.
+        model.AcceptInput("Skin", model, model, "0");
+        model.RenderColor = new Color32(255, 255, 255, 255);
+        ApplyNow(model, team, item);
     }
 
-    public void Restore(IPlayerPawn pawn, object? snapshot)
+    private void ApplyNow(IBaseModelEntity target, CStrikeTeam team, ItemDefinition item)
     {
-        if (snapshot is not ModelSnapshot state || !pawn.IsValid()) return;
-
-        if (!string.IsNullOrEmpty(state.Model))
-            pawn.SetModel(state.Model);
-
-        // The original skin can't be read back; a model without a store skin uses skin 0.
-        pawn.AcceptInput("Skin", pawn, pawn, "0");
-        pawn.RenderColor = state.Color;
-    }
-
-    private void ApplyNow(IPlayerPawn pawn, ItemDefinition item)
-    {
-        pawn.SetModel(item.Model!);
+        target.SetModel(item.Model!);
 
         if (item.Skin is not null)
-            pawn.AcceptInput("Skin", pawn, pawn, item.Skin);
+            target.AcceptInput("Skin", target, target, item.Skin);
 
         if (item.Color is null) return;
 
         if (TryParseColor(item.Color, out var color))
-            pawn.RenderColor = color;
+            target.RenderColor = color;
         else if(item.Color.Equals("random",  StringComparison.InvariantCultureIgnoreCase))
         {
             var random = new Random();
-            pawn.RenderColor = new Color32((byte) random.Next(0, 255), (byte) random.Next(0, 255), (byte) random.Next(0, 255), 254);
+            target.RenderColor = new Color32((byte) random.Next(0, 255), (byte) random.Next(0, 255), (byte) random.Next(0, 255), 254);
         }else if (item.Color.Equals("team", StringComparison.InvariantCultureIgnoreCase))
         {
-            switch (pawn.Team)
+            switch (team)
             {
                 case CStrikeTeam.TE:
-                    pawn.RenderColor = new Color32(255, 0, 0, 255);
+                    target.RenderColor = new Color32(255, 0, 0, 255);
                     break;
                 case CStrikeTeam.CT:
-                    pawn.RenderColor = new Color32(0, 0, 255, 255);
+                    target.RenderColor = new Color32(0, 0, 255, 255);
                     break;
             }
         }

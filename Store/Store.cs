@@ -101,6 +101,9 @@ public class Store : IModSharpModule
         services.AddSingleton<AdminManagerHolder>();
         services.AddSingleton<IModule>(sp => sp.GetRequiredService<AdminManagerHolder>());
 
+        services.AddSingleton<HudArbiterHolder>();
+        services.AddSingleton<IModule>(sp => sp.GetRequiredService<HudArbiterHolder>());
+
         // Item and equipment services
         services.AddSingleton<SessionItemStore>();
         services.AddSingleton<IItemService, ItemService>();
@@ -108,7 +111,7 @@ public class Store : IModSharpModule
         services.AddSingleton<IPurchaseService, PurchaseService>();
 
         // Store HUD services
-        services.AddSingleton<StoreCameraService>();
+        services.AddSingleton<StorePreviewService>();
         services.AddSingleton<VisibilityPreferences>();
 
         // CreditsModule — registered as concrete type so IModule + ICredits can both resolve the same instance
