@@ -6,6 +6,10 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <IsPackable>false</IsPackable>
+
+        <!-- Same as Store.csproj: Directory.Build.props turns warnings into errors, which would fail
+             the solution build (CI) on the NuGet audit warnings Store's dependencies already carry. -->
+        <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
     </PropertyGroup>
 
     <ItemGroup>
