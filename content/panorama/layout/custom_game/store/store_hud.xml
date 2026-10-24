@@ -23,9 +23,7 @@
 
 			<Panel class="Body" hittest="false">
 
-				<!-- Shop (Buy / Equip): collapsible category sections | preview model | detail.
-				     Panorama can't reorder panels, so the open section's header and those before it
-				     use the sec_ slots above the rows and the rest use the secb_ slots below them. -->
+				<!-- Shop (Buy / Equip): sections | preview model | detail. Open header and those above it use sec_ slots, the rest use secb_ slots below the rows -->
 				<Panel id="shop_view" class="ShopView" hittest="false">
 					<Panel class="LeftColumn" hittest="false">
 						<Panel class="ListPanel" hittest="false">
@@ -118,8 +116,8 @@
 							<Label class="DetailKicker" hittest="false" text="BUY" />
 							<Label id="buy_name" class="DetailName" hittest="false" text="{s:value}" />
 							<Label id="buy_meta" class="DetailMeta" hittest="false" text="{s:value}" />
-							<Label id="buy_desc" class="DetailDesc hud-hidden" html="true" hittest="false" text="{s:value}" />
-							<Label id="buy_blocked" class="DetailBlocked hud-hidden" html="true" hittest="false" text="{s:value}" />
+							<Label id="buy_desc" class="DetailDesc hud-hidden" hittest="false" text="{s:value}" />
+							<Label id="buy_blocked" class="DetailBlocked hud-hidden" hittest="false" text="{s:value}" />
 							<Panel class="DetailSpacer" hittest="false" />
 							<Label id="buy_question" class="DetailQuestion" hittest="false" text="{s:value}" />
 							<Button id="buy_confirm" class="PrimaryButton"><Label id="buy_confirm_lbl" class="PrimaryLabel" hittest="false" text="{s:value}" /></Button>
@@ -128,8 +126,8 @@
 						<Panel id="detail_equip" class="Detail hud-hidden" hittest="false">
 							<Label class="DetailKicker" hittest="false" text="EQUIP" />
 							<Label id="equip_name" class="DetailName" hittest="false" text="{s:value}" />
-							<Label id="equip_desc" class="DetailDesc hud-hidden" html="true" hittest="false" text="{s:value}" />
-							<Label id="equip_blocked" class="DetailBlocked hud-hidden" html="true" hittest="false" text="{s:value}" />
+							<Label id="equip_desc" class="DetailDesc hud-hidden" hittest="false" text="{s:value}" />
+							<Label id="equip_blocked" class="DetailBlocked hud-hidden" hittest="false" text="{s:value}" />
 							<Panel class="DetailSpacer" hittest="false" />
 							<Button id="team_t" class="TeamOption hud-hidden"><Label class="TeamLabel" hittest="false" text="Terrorists" /><Label id="team_t_eq" class="TeamEquipped hud-hidden" hittest="false" text="[EQUIPPED]" /></Button>
 							<Button id="team_ct" class="TeamOption hud-hidden"><Label class="TeamLabel" hittest="false" text="Counter-Terrorists" /><Label id="team_ct_eq" class="TeamEquipped hud-hidden" hittest="false" text="[EQUIPPED]" /></Button>

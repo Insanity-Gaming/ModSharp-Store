@@ -151,7 +151,7 @@
 }
 
 /* left: collapsible category sections. Same width as .RightColumn so the centre column, the
-   rotate controls and the preview model sit on the screen's centre line. */
+   rotate controls and the preview model sit on the screen centre line. */
 
 .LeftColumn {
 	width: 520px;
@@ -159,7 +159,7 @@
 }
 
 .ListPanel {
-	width: fill-parent-flow(1.0);
+	width: 100%;
 	height: 100%;
 	flow-children: down;
 	border-radius: 8px;
@@ -334,7 +334,7 @@
 	border: 1px solid #ffffff20;
 }
 
-/* price the player can't afford yet */
+/* price above the player credits */
 .RowChip.chip-short {
 	color: #FF465599;
 	border: 1px solid #FF465560;
@@ -444,7 +444,7 @@
 /* right: buy confirm / equip team options */
 
 .RightColumn {
-	width: 520px; /* must equal .LeftColumn */
+	width: 520px;
 	height: 100%;
 	padding: 22px;
 	border-radius: 8px;
@@ -493,7 +493,7 @@
 	color: #C4C9D6;
 }
 
-/* why a locked item can't be bought or equipped (Panorama HTML) */
+/* permission text for a locked item (Panorama HTML) */
 .DetailBlocked {
 	width: 100%;
 	margin-top: 14px;
