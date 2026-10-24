@@ -7,11 +7,7 @@
 
         <AssemblyName>InsanityGaming.Store.Shared</AssemblyName>
         <RootNamespace>InsanityGaming.Store.Shared</RootNamespace>
-        
-    </PropertyGroup>
 
-    <ItemGroup>
-      <PackageReference Include="ModSharp.Sharp.Modules.MenuManager.Shared" Version="2.1.118" />
-    </ItemGroup>
+    </PropertyGroup>
 
 </Project>

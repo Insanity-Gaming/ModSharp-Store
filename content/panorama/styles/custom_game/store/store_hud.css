@@ -1,0 +1,688 @@
+/*
+ * IG Store HUD. Palette matches the SurfTimer settings menu (surftimer_settings.css).
+ * Panorama CSS rules: px/% lengths only, no flex/grid/gap/calc/vars, transitions as longhands,
+ * visibility: collapse to hide. State is toggled by the server through classes only:
+ *   show, hud-hidden, on, open, sel, disabled, chip-price, chip-locked, chip-short, toast-ok/err/info.
+ * Never select a server-driven panel by #id (an id selector beats the class overrides).
+ */
+
+.hud-hidden {
+	visibility: collapse;
+}
+
+/* ---------- root ---------- */
+
+.StoreHudRoot {
+	width: 100%;
+	height: 100%;
+}
+
+.StoreRoot {
+	width: 100%;
+	height: 100%;
+	flow-children: down;
+	visibility: collapse;
+	opacity: 0.0;
+}
+
+.StoreRoot.show {
+	visibility: visible;
+	opacity: 1.0;
+	transition-property: opacity;
+	transition-duration: 0.15s;
+	transition-timing-function: ease-out;
+}
+
+/* ---------- top bar ---------- */
+
+.TopBar {
+	width: 100%;
+	height: 84px;
+	flow-children: right;
+	padding: 0px 32px;
+	background-color: #12171ee8;
+	border-top: 3px solid #FF4655;
+	border-bottom: 1px solid #ffffff14;
+}
+
+.Logo {
+	width: 48px;
+	height: 48px;
+	vertical-align: center;
+	background-size: contain;
+}
+
+.Brand {
+	vertical-align: center;
+	margin-left: 14px;
+	margin-right: 36px;
+	font-size: 20px;
+	font-weight: bold;
+	letter-spacing: 2px;
+	color: #E7EAF2;
+}
+
+.Tabs {
+	height: 100%;
+	flow-children: right;
+}
+
+.Tab {
+	height: 100%;
+	padding: 0px 22px;
+	background-color: transparent;
+	border-bottom: 3px solid transparent;
+}
+
+.Tab:hover {
+	background-color: #ffffff0c;
+}
+
+.Tab.on {
+	border-bottom: 3px solid #FF4655;
+}
+
+.TabLabel {
+	vertical-align: center;
+	font-size: 17px;
+	font-weight: 600;
+	letter-spacing: 1px;
+	color: #ffffffa0;
+}
+
+.Tab.on .TabLabel {
+	color: #ffffff;
+}
+
+.TopBarSpacer {
+	width: fill-parent-flow(1.0);
+}
+
+.Credits {
+	vertical-align: center;
+	margin-right: 16px;
+	padding: 8px 16px;
+	border-radius: 5px;
+	background-color: #ffffff10;
+}
+
+.CreditsLabel {
+	font-family: "JetBrains Mono", monospace;
+	font-size: 20px;
+	font-weight: bold;
+	color: #4CE165;
+}
+
+.CloseButton {
+	width: 40px;
+	height: 40px;
+	vertical-align: center;
+	border-radius: 5px;
+	background-color: #ffffff10;
+}
+
+.CloseButton:hover {
+	background-color: #ffffff1c;
+}
+
+.CloseLabel {
+	horizontal-align: center;
+	vertical-align: center;
+	font-size: 18px;
+	color: #ffffffb0;
+}
+
+.CloseButton:hover .CloseLabel {
+	color: #ffffff;
+}
+
+/* ---------- body ---------- */
+
+.Body {
+	width: 100%;
+	height: fill-parent-flow(1.0);
+}
+
+.ShopView {
+	width: 100%;
+	height: 100%;
+	flow-children: right;
+	padding: 24px 32px 32px 32px;
+}
+
+/* left: collapsible category sections. Same width as .RightColumn so the centre column, the
+   rotate controls and the preview model sit on the screen centre line. */
+
+.LeftColumn {
+	width: 520px;
+	height: 100%;
+}
+
+.ListPanel {
+	width: 100%;
+	height: 100%;
+	flow-children: down;
+	border-radius: 8px;
+	background-color: #12171ee8;
+	border: 1px solid #ffffff1a;
+}
+
+.SectionHeader {
+	width: 100%;
+	flow-children: right;
+	padding: 16px 18px;
+	border-bottom: 1px solid #ffffff14;
+}
+
+.SectionHeader:hover {
+	background-color: #ffffff0a;
+}
+
+.SectionHeader.open {
+	background-color: #ff46551f;
+	border-bottom: 1px solid #FF4655;
+}
+
+.SectionArrow {
+	width: 22px;
+	vertical-align: center;
+	font-size: 16px;
+	color: #8991A6;
+}
+
+.SectionHeader.open .SectionArrow {
+	color: #FF4655;
+}
+
+.SectionName {
+	width: fill-parent-flow(1.0);
+	vertical-align: center;
+	font-size: 22px;
+	font-weight: bold;
+	color: #E7EAF2;
+}
+
+.SectionCount {
+	vertical-align: center;
+	font-size: 14px;
+	color: #8991A6;
+}
+
+.ListScroll {
+	width: 100%;
+	height: fill-parent-flow(1.0);
+	flow-children: down;
+	padding: 10px;
+	overflow: squish scroll;
+}
+
+.ListEmpty {
+	margin: 16px 10px;
+	font-size: 16px;
+	color: #8991A6;
+}
+
+/* rich rows */
+
+.Row {
+	width: 100%;
+	height: 96px;
+	flow-children: right;
+	margin-bottom: 8px;
+	padding: 0px 14px 0px 10px;
+	border-radius: 6px;
+	background-color: #ffffff0c;
+	border: 1px solid transparent;
+	border-left: 4px solid transparent;
+}
+
+.Row:hover {
+	background-color: #ffffff14;
+}
+
+.Row.sel {
+	background-color: #ff46552e;
+	border: 1px solid #FF4655;
+	border-left: 4px solid #FF4655;
+}
+
+.Row.disabled {
+	opacity: 0.55;
+}
+
+.RowTile {
+	width: 74px;
+	height: 74px;
+	vertical-align: center;
+	border-radius: 5px;
+	background-color: #ffffff10;
+}
+
+.Row.sel .RowTile {
+	background-color: #ff46551f;
+}
+
+.RowTileLabel {
+	horizontal-align: center;
+	vertical-align: center;
+	font-size: 26px;
+	font-weight: bold;
+	letter-spacing: 2px;
+	color: #ffffff40;
+}
+
+.Row.sel .RowTileLabel {
+	color: #ffffffb0;
+}
+
+.RowText {
+	width: fill-parent-flow(1.0);
+	vertical-align: center;
+	flow-children: down;
+	margin-left: 16px;
+}
+
+.RowName {
+	font-size: 21px;
+	font-weight: bold;
+	color: #E7EAF2;
+}
+
+.Row.disabled .RowName {
+	color: #8991A6;
+}
+
+.RowTeam {
+	margin-top: 4px;
+	font-size: 14px;
+	color: #8991A6;
+}
+
+.RowEq {
+	vertical-align: center;
+	margin-left: 8px;
+	padding: 4px 10px;
+	border-radius: 4px;
+	border: 1px solid #5C9EFF;
+	font-size: 14px;
+	font-weight: bold;
+	color: #5C9EFF;
+}
+
+.RowChip {
+	vertical-align: center;
+	margin-left: 8px;
+	padding: 4px 10px;
+	border-radius: 4px;
+	font-family: "JetBrains Mono", monospace;
+	font-size: 16px;
+	font-weight: 600;
+}
+
+.RowChip.chip-price {
+	color: #4CE165;
+	border: 1px solid #4CE165;
+}
+
+.Row.sel .RowChip.chip-price {
+	color: #ffffff;
+	background-color: #4CE16540;
+}
+
+.RowChip.chip-locked {
+	color: #8991A6;
+	border: 1px solid #ffffff20;
+}
+
+/* price above the player credits */
+.RowChip.chip-short {
+	color: #FF465599;
+	border: 1px solid #FF465560;
+}
+
+/* centre: kept clear for the live model */
+
+.CenterColumn {
+	width: fill-parent-flow(1.0);
+	height: 100%;
+	flow-children: down;
+	margin: 0px 24px;
+}
+
+.PreviewBar {
+	horizontal-align: center;
+	padding: 8px 16px;
+	border-radius: 5px;
+	background-color: #12171ee8;
+	border: 1px solid #FF4655;
+}
+
+.PreviewLabel {
+	font-size: 16px;
+	color: #E7EAF2;
+}
+
+.Toast {
+	horizontal-align: center;
+	margin-top: 14px;
+	padding: 12px 20px;
+	border-radius: 5px;
+	background-color: #12171ee8;
+	border: 1px solid #ffffff20;
+	visibility: collapse;
+	opacity: 0.0;
+}
+
+.Toast.show {
+	visibility: visible;
+	opacity: 1.0;
+	transition-property: opacity;
+	transition-duration: 0.15s;
+	transition-timing-function: ease-out;
+}
+
+.Toast.toast-ok {
+	border: 1px solid #4CE165;
+}
+
+.Toast.toast-err {
+	border: 1px solid #FF4655;
+}
+
+.Toast.toast-info {
+	border: 1px solid #5C9EFF;
+}
+
+.ToastLabel {
+	font-size: 17px;
+	color: #E7EAF2;
+}
+
+.CenterSpacer {
+	height: fill-parent-flow(1.0);
+}
+
+.CamControls {
+	horizontal-align: center;
+	flow-children: right;
+}
+
+.CamButton {
+	width: 56px;
+	height: 56px;
+	border-radius: 5px;
+	background-color: #12171ee8;
+	border: 1px solid #ffffff20;
+}
+
+.CamButton:hover {
+	background-color: #1b222be8;
+}
+
+.CamLabel {
+	horizontal-align: center;
+	vertical-align: center;
+	font-size: 20px;
+	color: #E7EAF2;
+}
+
+.CamHint {
+	height: 56px;
+	margin: 0px 10px;
+	padding: 0px 18px;
+	border-radius: 5px;
+	background-color: #12171ee8;
+	border: 1px solid #ffffff14;
+}
+
+.CamHintLabel {
+	vertical-align: center;
+	font-size: 16px;
+	color: #ffffffb0;
+}
+
+/* right: buy confirm / equip team options */
+
+.RightColumn {
+	width: 520px;
+	height: 100%;
+	padding: 22px;
+	border-radius: 8px;
+	background-color: #12171ee8;
+	border: 1px solid #ffffff1a;
+}
+
+.DetailNone {
+	width: 100%;
+	font-size: 16px;
+	color: #8991A6;
+}
+
+.Detail {
+	width: 100%;
+	height: 100%;
+	flow-children: down;
+}
+
+.DetailKicker {
+	font-size: 13px;
+	font-weight: bold;
+	letter-spacing: 1px;
+	color: #FF4655;
+}
+
+.DetailName {
+	width: 100%;
+	margin-top: 6px;
+	font-size: 34px;
+	font-weight: bold;
+	color: #E7EAF2;
+}
+
+.DetailMeta {
+	margin-top: 6px;
+	font-size: 16px;
+	color: #8991A6;
+}
+
+/* item description from the item JSON (Panorama HTML) */
+.DetailDesc {
+	width: 100%;
+	margin-top: 14px;
+	font-size: 16px;
+	color: #C4C9D6;
+}
+
+/* permission text for a locked item (Panorama HTML) */
+.DetailBlocked {
+	width: 100%;
+	margin-top: 14px;
+	padding: 10px 12px;
+	border-radius: 5px;
+	background-color: #ff465514;
+	border: 1px solid #FF465560;
+	font-size: 16px;
+	color: #E7EAF2;
+}
+
+.DetailSpacer {
+	height: fill-parent-flow(1.0);
+}
+
+.DetailQuestion {
+	width: 100%;
+	margin-bottom: 12px;
+	font-size: 17px;
+	color: #ffffffb0;
+}
+
+.DetailHint {
+	margin-top: 8px;
+	font-size: 14px;
+	color: #8991A6;
+}
+
+.PrimaryButton {
+	width: 100%;
+	height: 60px;
+	border-radius: 5px;
+	background-color: #FF4655;
+}
+
+.PrimaryButton:hover {
+	background-color: #FF6B78;
+}
+
+.PrimaryButton.disabled {
+	opacity: 0.5;
+}
+
+.PrimaryLabel {
+	horizontal-align: center;
+	vertical-align: center;
+	font-size: 18px;
+	font-weight: bold;
+	letter-spacing: 1px;
+	color: #ffffff;
+}
+
+.TeamOption {
+	width: 100%;
+	height: 58px;
+	flow-children: right;
+	margin-top: 8px;
+	padding: 0px 16px;
+	border-radius: 5px;
+	background-color: #ffffff0c;
+	border: 1px solid #ffffff20;
+}
+
+.TeamOption:hover {
+	background-color: #ffffff14;
+}
+
+.TeamOption.on {
+	background-color: #5c9eff2e;
+	border: 1px solid #5C9EFF;
+}
+
+.TeamOption.disabled {
+	opacity: 0.5;
+}
+
+.TeamLabel {
+	width: fill-parent-flow(1.0);
+	vertical-align: center;
+	font-size: 18px;
+	font-weight: 600;
+	color: #E7EAF2;
+}
+
+.TeamOption.on .TeamLabel {
+	color: #5C9EFF;
+}
+
+.TeamEquipped {
+	vertical-align: center;
+	font-size: 14px;
+	font-weight: bold;
+	color: #5C9EFF;
+}
+
+/* ---------- settings ---------- */
+
+.SettingsView {
+	width: 640px;
+	height: 100%;
+	flow-children: down;
+	margin: 24px 32px 32px 32px;
+	padding: 22px;
+	border-radius: 8px;
+	background-color: #12171ee8;
+	border: 1px solid #ffffff1a;
+}
+
+.SettingsTitle {
+	font-size: 26px;
+	font-weight: bold;
+	color: #E7EAF2;
+}
+
+.SettingsHint {
+	margin-top: 4px;
+	margin-bottom: 14px;
+	font-size: 15px;
+	color: #8991A6;
+}
+
+.SettingsEmpty {
+	margin-top: 8px;
+	font-size: 16px;
+	color: #8991A6;
+}
+
+.SettingsList {
+	width: 100%;
+	height: fill-parent-flow(1.0);
+	flow-children: down;
+	overflow: squish scroll;
+}
+
+.SetRow {
+	width: 100%;
+	flow-children: right;
+	margin-bottom: 8px;
+	padding: 14px 16px;
+	border-radius: 6px;
+	background-color: #ffffff0c;
+	border: 1px solid #ffffff14;
+}
+
+.SetRow:hover {
+	background-color: #ffffff14;
+}
+
+.SetText {
+	width: fill-parent-flow(1.0);
+	vertical-align: center;
+	flow-children: down;
+}
+
+.SetTitle {
+	font-size: 17px;
+	font-weight: 600;
+	color: #E7EAF2;
+}
+
+.SetDesc {
+	margin-top: 3px;
+	font-size: 13px;
+	color: #8991A6;
+}
+
+.Switch {
+	width: 44px;
+	height: 24px;
+	vertical-align: center;
+	border-radius: 12px;
+	background-color: #ffffff26;
+}
+
+.SetRow.on .Switch {
+	background-color: #FF4655;
+}
+
+.SwitchThumb {
+	width: 20px;
+	height: 20px;
+	margin: 2px;
+	horizontal-align: left;
+	border-radius: 10px;
+	background-color: #ffffff;
+	transition-property: horizontal-align;
+	transition-duration: 0.12s;
+}
+
+.SetRow.on .SwitchThumb {
+	horizontal-align: right;
+}

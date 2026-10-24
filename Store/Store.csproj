@@ -37,15 +37,18 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="ModSharp.Sharp.Modules.AdminManager.Shared" Version="2.1.118" />
-        <PackageReference Include="ModSharp.Sharp.Modules.MenuManager.Shared" Version="2.1.118" />
-        <PackageReference Include="ModSharp.Sharp.Modules.TargetingManager.Shared" Version="2.1.123" />
-        <PackageReference Include="ModSharp.Sharp.Shared" Version="*" PrivateAssets="all" />
+        <PackageReference Include="ModSharp.Sharp.Modules.AdminManager.Shared" Version="2.1.189" />
+        <PackageReference Include="ModSharp.Sharp.Modules.ClientPreferences.Shared" Version="2.1.189" />
+        <PackageReference Include="ModSharp.Sharp.Modules.TargetingManager.Shared" Version="2.1.189" />
+        <PackageReference Include="ModSharp.Sharp.Shared" Version="2.1.189" PrivateAssets="all" />
         <PackageReference Include="SqlSugarCore" Version="5.1.4.214" />
     </ItemGroup>
 
     <ItemGroup>
       <ProjectReference Include="..\Store.Shared\Store.Shared.csproj" />
+      <!-- HudArbiter's API from the private Insanity-Gaming feed (see nuget.config). Loaded from
+           game/sharp/shared at runtime, so it is compile-only and never shipped with this module. -->
+      <PackageReference Include="InsanityGaming.HudArbiter.Shared" Version="1.0.2" ExcludeAssets="runtime" />
     </ItemGroup>
 
 </Project>

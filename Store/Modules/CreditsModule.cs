@@ -19,11 +19,19 @@ public class CreditsModule : IModule, ICredits, IClientListener, IEventListener
     private readonly Store _plugin;
     private StoreConfig _config;
 
+    // A slot's balance always carries the SteamId it was loaded for, so a balance can never be
+    // awarded to, saved for, or inherited by a different player who later occupies the same slot.
+    private readonly record struct CreditEntry(ulong SteamId, uint Amount);
+
+    private const int MaxLoadRetries = 3;
+    private const float LoadRetryDelay = 5.0f;
+
     // All reads and writes to _credits MUST acquire _sync first.
-    // _connectRetries is only ever touched on the game thread, so no lock needed.
+    // _connectRetries and _loadRetries are only ever touched on the game thread, so no lock needed.
     private readonly object _sync = new();
-    private readonly Dictionary<PlayerSlot, uint> _credits = new();
+    private readonly Dictionary<PlayerSlot, CreditEntry> _credits = new();
     private readonly Dictionary<ulong, int> _connectRetries = new();
+    private readonly Dictionary<ulong, int> _loadRetries = new();
 
     private Guid _timer;
 
@@ -73,20 +81,17 @@ public class CreditsModule : IModule, ICredits, IClientListener, IEventListener
         _bridge.ModSharp.StopTimer(_timer);
 
         // Snapshot under lock, save outside lock so no DB work holds _sync.
-        var clients = _bridge.ClientManager.GetGameClients(true).ToList();
-
-        foreach (var c in clients)
+        // Each balance is saved for the SteamId it was loaded for.
+        List<CreditEntry> entries;
+        lock (_sync)
         {
-            if (c.SteamId == 0) continue;
+            entries = _credits.Values.Where(e => e.SteamId != 0).ToList();
+        }
 
-            uint amount;
-            lock (_sync)
-            {
-                if (!_credits.TryGetValue(c.Slot, out amount)) continue;
-            }
-
-            try { _repository.UpdateCreditsAsync(c.SteamId, amount).Wait(); }
-            catch (Exception ex) { _logger.LogError(ex, "[Credits] Shutdown persist failed for {SteamId}", c.SteamId); }
+        foreach (var entry in entries)
+        {
+            try { _repository.UpdateCreditsAsync(entry.SteamId, entry.Amount).Wait(); }
+            catch (Exception ex) { _logger.LogError(ex, "[Credits] Shutdown persist failed for {SteamId}", entry.SteamId); }
         }
 
         lock (_sync) { _credits.Clear(); }
@@ -115,21 +120,24 @@ public class CreditsModule : IModule, ICredits, IClientListener, IEventListener
 
     public void OnClientDisconnected(IGameClient client, NetworkDisconnectionReason reason)
     {
-        var steamId = client.SteamId;
-        var slot    = client.Slot;
+        var slot = client.Slot;
 
-        // _connectRetries is game-thread-only, no lock needed.
-        _connectRetries.Remove(steamId);
+        // _connectRetries / _loadRetries are game-thread-only, no lock needed.
+        _connectRetries.Remove(client.SteamId);
+        _loadRetries.Remove(client.SteamId);
 
-        uint amount;
+        CreditEntry entry;
         lock (_sync)
         {
             // If the slot was never populated (churn connect that never completed its load),
             // there is nothing to save — and we must NOT save 0 for a real balance.
-            if (!_credits.Remove(slot, out amount))
+            if (!_credits.Remove(slot, out entry))
                 return;
         }
 
+        // Save for the player the balance was loaded for, not whatever SteamId the client reports now.
+        var steamId = entry.SteamId;
+        var amount  = entry.Amount;
         if (steamId == 0) return;
 
         // Fire-and-forget with a real async try/catch so exceptions are observable.
@@ -237,8 +245,53 @@ public class CreditsModule : IModule, ICredits, IClientListener, IEventListener
             catch (Exception ex)
             {
                 _logger.LogError(ex, "[Credits] Failed to load credits for {SteamId}", steamId);
+
+                // Without a retry the player stays unloaded all session: no awards, no purchases.
+                _bridge.ModSharp.InvokeFrameAction(() => ScheduleLoadRetry(steamId));
             }
         });
+    }
+
+    /// <summary>Game thread. Retries a failed DB load a few times before giving up for the session.</summary>
+    private void ScheduleLoadRetry(ulong steamId)
+    {
+        var attempt = _loadRetries.GetValueOrDefault(steamId, 0) + 1;
+
+        if (attempt > MaxLoadRetries)
+        {
+            _loadRetries.Remove(steamId);
+            _logger.LogError("[Credits] Giving up loading credits for {SteamId} after {Retries} retries", steamId, MaxLoadRetries);
+            return;
+        }
+
+        _loadRetries[steamId] = attempt;
+        _logger.LogDebug("[Credits] Scheduling credit load retry {Attempt}/{Max} for {SteamId}", attempt, MaxLoadRetries, steamId);
+        _bridge.ModSharp.PushTimer(() => RetryFailedLoad(steamId), LoadRetryDelay, GameTimerFlags.None);
+    }
+
+    private void RetryFailedLoad(ulong steamId)
+    {
+        var client = _bridge.ClientManager
+            .GetGameClients(true)
+            .FirstOrDefault(c => c.SteamId == steamId);
+
+        if (client is null)
+        {
+            _loadRetries.Remove(steamId);
+            return;
+        }
+
+        lock (_sync)
+        {
+            // Loaded meanwhile (e.g. a duplicate connect event succeeded) — nothing to retry.
+            if (_credits.TryGetValue(client.Slot, out var entry) && entry.SteamId == steamId)
+            {
+                _loadRetries.Remove(steamId);
+                return;
+            }
+        }
+
+        LoadCredits(client.SteamId, client.Slot, client.Name);
     }
 
     /// <summary>
@@ -261,18 +314,39 @@ public class CreditsModule : IModule, ICredits, IClientListener, IEventListener
             return;
         }
 
+        _loadRetries.Remove(steamId);
+
+        CreditEntry stale = default;
         lock (_sync)
         {
-            // If credits are already present for this slot the player's session is live
-            // (purchases/awards have already touched the value). Overwriting with the stale
-            // DB read would lose those changes — discard.
-            if (_credits.ContainsKey(slot))
+            if (_credits.TryGetValue(slot, out var existing))
             {
-                _logger.LogDebug("[Credits] CommitLoad discarded for {SteamId} slot {Slot}: already loaded (duplicate connect event)", steamId, slot);
-                return;
+                // Same player already loaded: their session is live (purchases/awards have already
+                // touched the value). Overwriting with the stale DB read would lose those changes.
+                if (existing.SteamId == steamId)
+                {
+                    _logger.LogDebug("[Credits] CommitLoad discarded for {SteamId} slot {Slot}: already loaded (duplicate connect event)", steamId, slot);
+                    return;
+                }
+
+                // A different player's balance is still sitting in this slot (their disconnect was
+                // missed). Don't let the new player inherit it; save it back to its owner below.
+                stale = existing;
             }
 
-            _credits[slot] = value;
+            _credits[slot] = new CreditEntry(steamId, value);
+        }
+
+        if (stale.SteamId != 0)
+        {
+            _logger.LogWarning("[Credits] Slot {Slot} still held {Stale}'s balance when {SteamId} loaded; saving it back to its owner",
+                slot, stale.SteamId, steamId);
+
+            _ = Task.Run(async () =>
+            {
+                try { await _repository.UpdateCreditsAsync(stale.SteamId, stale.Amount); }
+                catch (Exception ex) { _logger.LogError(ex, "[Credits] Failed to save stale balance for {SteamId}", stale.SteamId); }
+            });
         }
 
         _logger.LogDebug("[Credits] Loaded {Credits} for {SteamId} (slot {Slot})", value, steamId, slot);
@@ -312,8 +386,14 @@ public class CreditsModule : IModule, ICredits, IClientListener, IEventListener
 
         foreach (var controller in players)
         {
-            clientBySlot.TryGetValue(controller.PlayerSlot, out var client);
-            var flagMultiplier = client is not null ? GetFlagMultiplier(client) : 1.0f;
+            // Only award a balance that belongs to the player now in the slot.
+            if (!clientBySlot.TryGetValue(controller.PlayerSlot, out var client) || !OwnsSlot(controller.PlayerSlot, client.SteamId))
+            {
+                _logger.LogDebug("Skipping credit award for slot {Slot}: balance not loaded for its current player", controller.PlayerSlot);
+                continue;
+            }
+
+            var flagMultiplier = GetFlagMultiplier(client);
             var reward         = (uint)(basePoints * dynamicMultiplier * flagMultiplier);
 
             if (!AddCreditsBySlot(controller.PlayerSlot, (int)reward))
@@ -337,15 +417,21 @@ public class CreditsModule : IModule, ICredits, IClientListener, IEventListener
         List<(ulong SteamId, uint Credits)> snapshot;
         lock (_sync)
         {
+            // Only balances owned by the player currently in the slot; a stale entry must never be
+            // written onto the new occupant's account.
             snapshot = clients
-                .Where(c => _credits.ContainsKey(c.Slot))
-                .Select(c => (SteamId: (ulong)c.SteamId, Credits: _credits[c.Slot]))
+                .Where(c => _credits.TryGetValue(c.Slot, out var e) && e.SteamId == c.SteamId)
+                .Select(c => (SteamId: (ulong)c.SteamId, Credits: _credits[c.Slot].Amount))
                 .ToList();
         }
 
         _ = Task.Run((Func<Task>)(async () =>
         {
-            try { await _repository.BulkUpdateCreditsAsync(snapshot); }
+            try
+            {
+                if (!await _repository.BulkUpdateCreditsAsync(snapshot))
+                    _logger.LogError("[Credits] Safety save failed for {Count} players (transaction rolled back)", snapshot.Count);
+            }
             catch (Exception ex) { _logger.LogError(ex, "[Credits] Safety save failed"); }
         }));
     }
@@ -357,14 +443,31 @@ public class CreditsModule : IModule, ICredits, IClientListener, IEventListener
     public uint GetCreditsBySlot(PlayerSlot slot)
     {
         lock (_sync)
-            return _credits.GetValueOrDefault(slot);
+            return _credits.TryGetValue(slot, out var entry) ? entry.Amount : 0;
     }
 
     public bool SetCreditsBySlot(PlayerSlot slot, uint amount)
     {
         lock (_sync)
         {
-            _credits[slot] = amount;
+            if (_credits.TryGetValue(slot, out var entry))
+            {
+                _credits[slot] = entry with { Amount = amount };
+                return true;
+            }
+        }
+
+        // Not loaded yet: bind the balance to the player in the slot so it can't leak to a later one.
+        var client = _bridge.ClientManager
+            .GetGameClients(true)
+            .FirstOrDefault(c => c.Slot == slot);
+
+        if (client is null || client.SteamId == 0)
+            return false;
+
+        lock (_sync)
+        {
+            _credits[slot] = new CreditEntry(client.SteamId, amount);
             return true;
         }
     }
@@ -378,7 +481,7 @@ public class CreditsModule : IModule, ICredits, IClientListener, IEventListener
             if (!_credits.TryGetValue(slot, out var current))
                 return false;
 
-            var result = (long)current + amount;
+            var result = (long)current.Amount + amount;
 
             // Prevent negative
             if (result < 0)
@@ -388,7 +491,7 @@ public class CreditsModule : IModule, ICredits, IClientListener, IEventListener
             if (result > uint.MaxValue)
                 result = uint.MaxValue;
 
-            _credits[slot] = (uint)result;
+            _credits[slot] = current with { Amount = (uint)result };
             return true;
         }
     }
@@ -398,10 +501,20 @@ public class CreditsModule : IModule, ICredits, IClientListener, IEventListener
         uint value;
         lock (_sync)
         {
-            if (!_credits.TryGetValue(slot, out value))
+            // Never write a slot's balance onto a different player's account.
+            if (!_credits.TryGetValue(slot, out var entry) || entry.SteamId != steamId)
                 return Task.CompletedTask;
+
+            value = entry.Amount;
         }
         return _repository.UpdateCreditsAsync(steamId, value);
+    }
+
+    /// <summary>True when the slot holds a loaded balance that belongs to <paramref name="steamId"/>.</summary>
+    private bool OwnsSlot(PlayerSlot slot, ulong steamId)
+    {
+        lock (_sync)
+            return _credits.TryGetValue(slot, out var entry) && entry.SteamId == steamId;
     }
 
     // -------------------------

@@ -72,7 +72,17 @@ public class PurchaseService : IPurchaseService
 
         // Persist the deducted balance immediately so a crash or late race between
         // purchase and the next periodic save cannot undo the deduction or gift the item.
-        await _credits.PersistAsync(steamId, slot);
+        // The purchase itself has already succeeded (credits deducted in memory, item inserted), so a
+        // failed save is logged rather than reported as a failed purchase; the next periodic save
+        // writes the same balance.
+        try
+        {
+            await _credits.PersistAsync(steamId, slot);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "BuyAsync: immediate credit save failed for {SteamId} after buying '{Unique}'; the periodic save will retry", steamId, unique);
+        }
 
         _logger.LogDebug("BuyAsync: player {SteamId} purchased '{Unique}' for {Price} credits", steamId, unique, definition.Price);
         return PurchaseResult.Success;

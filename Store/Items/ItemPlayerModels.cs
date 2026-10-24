@@ -16,6 +16,9 @@ public class ItemPlayerModels : IItemType
     public string TypeName => "player_models";
     public int Slot => EquipmentSlot;
 
+    // A model is one model for everyone, so it cannot be hidden per viewer.
+    public StoreVisibilityToggle? VisibilityToggle => null;
+
     public ItemPlayerModels(InterfaceBridge bridge, ILogger<ItemPlayerModels> logger)
     {
         _bridge = bridge;
@@ -37,33 +40,55 @@ public class ItemPlayerModels : IItemType
             _logger.LogDebug("[{Type}] Equipping {Player} → model: {Model} skin: {Skin} color: {Color}",
                 TypeName, playerName, item.Model, item.Skin ?? "default", item.Color ?? "default");
 
-            pawn.SetModel(item.Model);
+            ApplyNow(pawn, pawn.Team, item);
 
-            if (item.Skin is not null)
-                pawn.AcceptInput("Skin", pawn, pawn, item.Skin);
-
-            if (item.Color is null) return;
-
-            if (TryParseColor(item.Color, out var color))
-                pawn.RenderColor = color;
-            else if(item.Color.Equals("random",  StringComparison.InvariantCultureIgnoreCase))
-            {
-                var random = new Random();
-                pawn.RenderColor = new Color32((byte) random.Next(0, 255), (byte) random.Next(0, 255), (byte) random.Next(0, 255), 254);
-            }else if (item.Color.Equals("team", StringComparison.InvariantCultureIgnoreCase))
-            {
-                switch (pawn.Team)
-                {
-                    case CStrikeTeam.TE:
-                        pawn.RenderColor = new Color32(255, 0, 0, 255);
-                        break;
-                    case CStrikeTeam.CT:
-                        pawn.RenderColor = new Color32(0, 0, 255, 255);
-                        break;
-                }
-            }
-            
         }, 0.5f, GameTimerFlags.None);
+    }
+
+    public void Preview(IPlayerPawn pawn, ItemDefinition item)
+    {
+        if (string.IsNullOrEmpty(item.Model) || !pawn.IsValid()) return;
+
+        ApplyNow(pawn, pawn.Team, item);
+    }
+
+    public void PreviewOnModel(IBaseModelEntity model, CStrikeTeam team, ItemDefinition item)
+    {
+        if (string.IsNullOrEmpty(item.Model) || !model.IsValid()) return;
+
+        // The previous preview's skin and colour would otherwise carry over to an item without them.
+        model.AcceptInput("Skin", model, model, "0");
+        model.RenderColor = new Color32(255, 255, 255, 255);
+        ApplyNow(model, team, item);
+    }
+
+    private void ApplyNow(IBaseModelEntity target, CStrikeTeam team, ItemDefinition item)
+    {
+        target.SetModel(item.Model!);
+
+        if (item.Skin is not null)
+            target.AcceptInput("Skin", target, target, item.Skin);
+
+        if (item.Color is null) return;
+
+        if (TryParseColor(item.Color, out var color))
+            target.RenderColor = color;
+        else if(item.Color.Equals("random",  StringComparison.InvariantCultureIgnoreCase))
+        {
+            var random = new Random();
+            target.RenderColor = new Color32((byte) random.Next(0, 255), (byte) random.Next(0, 255), (byte) random.Next(0, 255), 254);
+        }else if (item.Color.Equals("team", StringComparison.InvariantCultureIgnoreCase))
+        {
+            switch (team)
+            {
+                case CStrikeTeam.TE:
+                    target.RenderColor = new Color32(255, 0, 0, 255);
+                    break;
+                case CStrikeTeam.CT:
+                    target.RenderColor = new Color32(0, 0, 255, 255);
+                    break;
+            }
+        }
     }
 
     private static bool TryParseColor(string value, out Color32 color)

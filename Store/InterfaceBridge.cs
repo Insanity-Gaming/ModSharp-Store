@@ -39,6 +39,35 @@ public sealed class InterfaceBridge
 	public ISharedSystem SharedSystem { get; }
 	public ISharpModuleManager ModuleManager { get; set; }
 
+	/// <summary>
+	/// Resolved lazily: on a ModSharp Core without Panorama support,
+	/// <c>ISharedSystem.GetPanoramaManager()</c> throws <see cref="MissingMethodException"/>.
+	/// Latching to null keeps the store HUD inert instead of failing the whole module on load.
+	/// </summary>
+	public IPanoramaManager? PanoramaManager
+	{
+		get
+		{
+			if (_panoramaManager is not null || _panoramaManagerUnsupported)
+				return _panoramaManager;
+
+			try
+			{
+				_panoramaManager = SharedSystem.GetPanoramaManager();
+			}
+			catch (MissingMethodException e)
+			{
+				_logger.LogWarning(e,
+					"ISharedSystem.GetPanoramaManager() is missing on this server's ModSharp Core. The store HUD will stay disabled.");
+				_panoramaManagerUnsupported = true;
+			}
+
+			return _panoramaManager;
+		}
+	}
+
+	private IPanoramaManager? _panoramaManager;
+	private bool _panoramaManagerUnsupported;
 
 	private readonly ILogger<InterfaceBridge> _logger;
 

@@ -21,25 +21,22 @@ public class UserRepository : BaseRepository<Users>, IUserRepository
     {
         if (updates.Count == 0) return true;
 
-        try
-        {
-            await Db.Ado.BeginTranAsync();
+        // Db returns a fresh client on every access (CopyNew), so the transaction and every update
+        // must go through this one instance; otherwise the updates run outside the transaction and
+        // the client that began it is never committed or closed.
+        var db = Db;
 
+        var result = await db.Ado.UseTranAsync(async () =>
+        {
             foreach (var (steamId, credits) in updates)
             {
-                await Db.Updateable<Users>()
+                await db.Updateable<Users>()
                     .SetColumns(u => u.Credits == credits)
                     .Where(u => u.Id == steamId)
                     .ExecuteCommandAsync();
             }
+        });
 
-            await Db.Ado.CommitTranAsync();
-            return true;
-        }
-        catch
-        {
-            await Db.Ado.RollbackTranAsync();
-            return false;
-        }
+        return result.IsSuccess;
     }
 }
