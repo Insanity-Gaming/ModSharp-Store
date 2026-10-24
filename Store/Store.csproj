@@ -46,6 +46,8 @@
 
     <ItemGroup>
       <ProjectReference Include="..\Store.Shared\Store.Shared.csproj" />
+      <!-- HudArbiter's API; loaded from game/sharp/shared at runtime, never shipped with Store. -->
+      <ProjectReference Include="..\..\HudManager\HudArbiter.Shared\HudArbiter.Shared.csproj" Private="false" />
     </ItemGroup>
 
 </Project>

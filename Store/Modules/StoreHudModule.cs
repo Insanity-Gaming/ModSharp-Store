@@ -1,3 +1,4 @@
+using InsanityGaming.HudArbiter.Shared;
 using InsanityGaming.Store.Hud;
 using InsanityGaming.Store.Interfaces;
 using InsanityGaming.Store.Items;
@@ -81,7 +82,7 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
     private enum Tab { Buy, Equip, Settings }
     private enum ToastKind { Ok, Error, Info }
 
-    public enum CloseReason { Closed, Toggle, Death, TeamChange, Respawn, RoundStart, Disconnect, MapChange, Shutdown, ConfigReload, Invalid }
+    public enum CloseReason { Closed, Toggle, Death, TeamChange, Respawn, RoundStart, Disconnect, MapChange, Shutdown, ConfigReload, Invalid, HudPreempted }
 
     private sealed class StoreSession
     {
@@ -130,6 +131,7 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
     private readonly AdminManagerHolder _adminManager;
     private readonly StorePreviewService _preview;
     private readonly VisibilityPreferences _visibility;
+    private readonly HudArbiterHolder _hudArbiter;
     private readonly ILogger<StoreHudModule> _logger;
 
     private readonly PlayerHudLayoutHost _layoutHost;
@@ -158,6 +160,7 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
         AdminManagerHolder adminManager,
         StorePreviewService preview,
         VisibilityPreferences visibility,
+        HudArbiterHolder hudArbiter,
         ILogger<StoreHudModule> logger)
     {
         _bridge           = bridge;
@@ -172,6 +175,7 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
         _adminManager     = adminManager;
         _preview          = preview;
         _visibility       = visibility;
+        _hudArbiter       = hudArbiter;
         _logger           = logger;
 
         _layoutHost   = new PlayerHudLayoutHost(bridge, logger, LayoutResource, LayoutTargetPrefix);
@@ -189,6 +193,7 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
 
     public bool Init()
     {
+        _hudArbiter.MenuStateChanged += OnMenuStateChanged;
         _bridge.ClientManager.InstallCommandCallback("store", OnStoreCommand);
         _bridge.ClientManager.InstallCommandCallback("shop",  OnStoreCommand);
         _bridge.ClientManager.InstallClientListener(this);
@@ -209,6 +214,7 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
         _layoutHost.KillAll();
         _preview.StopAll();
 
+        _hudArbiter.MenuStateChanged -= OnMenuStateChanged;
         _bridge.ClientManager.RemoveCommandCallback("store", OnStoreCommand);
         _bridge.ClientManager.RemoveCommandCallback("shop",  OnStoreCommand);
         _bridge.ClientManager.RemoveClientListener(this);
@@ -335,9 +341,28 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
         if (client.GetPlayerController() is null)
             return ECommandAction.Handled;
 
+        // Another plugin's screen (e.g. a map vote) may own the mouse or the screen right now.
+        var claim = _hudArbiter.ActivateMenu(client.Slot);
+        if (!claim.Granted)
+        {
+            client.Print(HudPrintChannel.Chat,
+                Chat($"You can't open the store while the {claim.BlockedByDisplayName ?? "current screen"} is open."));
+            return ECommandAction.Handled;
+        }
+
         // Dead players and spectators can shop too (as with the old menu); they get browse mode.
         BeginOpen(client);
         return ECommandAction.Handled;
+    }
+
+    /// <summary>HudArbiter: a higher-priority screen needs the mouse or the screen, so the store closes.</summary>
+    private void OnMenuStateChanged(PlayerSlot slot, HudElementState state, string? blockedBy)
+    {
+        if (state == HudElementState.Visible || !_sessions.ContainsKey(slot))
+            return;
+
+        CloseSession(slot, CloseReason.HudPreempted);
+        PrintChat(slot, Chat($"The store was closed for the {blockedBy ?? "current screen"}."));
     }
 
     // -------------------------
@@ -455,6 +480,8 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
     {
         if (!_sessions.Remove(slot, out var session))
             return;
+
+        _hudArbiter.DeactivateMenu(slot);
 
         // Bump the generation so any in-flight async continuation or toast timer becomes a no-op.
         _generations[slot]++;
