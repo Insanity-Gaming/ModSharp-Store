@@ -3,4 +3,5 @@ obj/
 game/
 /packages/
 riderModule.iml
-/_ReSharper.Caches/.superpowers/
+/_ReSharper.Caches/
+.superpowers/

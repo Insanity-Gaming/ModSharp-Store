@@ -410,10 +410,10 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
         // Everyone previews: a living pawn on a team, or the observer of a dead / spectating player.
         var livePawn = GetLivePawn(slot);
         IBasePlayerPawn? viewer = livePawn is { Team: CStrikeTeam.TE or CStrikeTeam.CT } ? livePawn : GetObserverPawn(slot);
-        var team     = StoreItemRules.PreviewTeam((int)(client.GetPlayerController()?.Team ?? CStrikeTeam.UnAssigned), 0);
+        var team     = StoreItemRules.PreviewTeam(ControllerTeam(slot), 0);
 
         session.LivePreview = viewer is not null
-                              && _preview.Start(slot, viewer, team, FallbackPreviewModel(session, team));
+                              && _preview.Start(slot, viewer, FallbackPreviewModel(session, team));
 
         // A living player who can't be frozen in front of a preview must not walk around in a live
         // store; a dead or spectating player falls back to browse mode instead.
@@ -621,7 +621,7 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
                 || _itemService.GetItemType(item.Unique) is not { } type)
                 continue;
 
-            if (!_preview.Show(session.Slot, type, item))
+            if (!_preview.Show(session.Slot, type, item, team))
                 _logger.LogDebug("Equipped item {Unique} not shown on the store preview for slot {Slot}", item.Unique, session.Slot);
         }
     }
@@ -631,8 +631,10 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
         if (!session.LivePreview || _itemService.GetItemType(item.Unique) is not { } type)
             return;
 
-        // Previews only ever touch the preview model, never the pawn.
-        if (!_preview.Show(session.Slot, type, item))
+        // Previews only ever touch the preview model, never the pawn. A spectator sees a
+        // single-team item as that team.
+        var team = StoreItemRules.PreviewTeam(ControllerTeam(session.Slot), item.Team);
+        if (!_preview.Show(session.Slot, type, item, team))
             _logger.LogDebug("Store preview ignored for slot {Slot}", session.Slot);
     }
 
@@ -1220,6 +1222,9 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
            && pawn.IsValid()
             ? pawn
             : null;
+
+    private int ControllerTeam(PlayerSlot slot)
+        => (int)(_bridge.ClientManager.GetGameClient(slot)?.GetPlayerController()?.Team ?? CStrikeTeam.UnAssigned);
 
     private IObserverPawn? GetObserverPawn(PlayerSlot slot)
         => _bridge.ClientManager.GetGameClient(slot)?.GetPlayerController()?.GetObserverPawn() is { } observer
