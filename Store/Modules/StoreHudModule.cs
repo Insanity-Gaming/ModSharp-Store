@@ -99,8 +99,9 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
         public bool    Pending   { get; set; }
 
         /// <summary>
-        /// True when the player was alive on T/CT at open: preview model, freeze and live
-        /// preview. False is browse mode (dead / spectating): the full store, no pawn involved.
+        /// True when the preview model is running: the viewer (living pawn, or the observer of a
+        /// dead or spectating player) is held in place in front of it. False is browse mode, the
+        /// fallback when no preview could be started for a dead or spectating player.
         /// </summary>
         public bool    LivePreview { get; set; }
 
@@ -406,12 +407,17 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
         session.ClickLayout = layout.Entity;
         session.Open        = true;
 
-        // Live preview needs a living pawn on a team; everyone else browses without the preview model.
-        var pawn = GetLivePawn(slot);
-        session.LivePreview = pawn is { Team: CStrikeTeam.TE or CStrikeTeam.CT };
+        // Everyone previews: a living pawn on a team, or the observer of a dead / spectating player.
+        var livePawn = GetLivePawn(slot);
+        IBasePlayerPawn? viewer = livePawn is { Team: CStrikeTeam.TE or CStrikeTeam.CT } ? livePawn : GetObserverPawn(slot);
+        var team     = StoreItemRules.PreviewTeam((int)(client.GetPlayerController()?.Team ?? CStrikeTeam.UnAssigned), 0);
 
-        // No preview model means no freeze: refuse rather than open a live store that can't show anything.
-        if (session.LivePreview && !_preview.Start(slot, pawn!))
+        session.LivePreview = viewer is not null
+                              && _preview.Start(slot, viewer, team, FallbackPreviewModel(session, team));
+
+        // A living player who can't be frozen in front of a preview must not walk around in a live
+        // store; a dead or spectating player falls back to browse mode instead.
+        if (!session.LivePreview && viewer is not null && viewer == livePawn)
         {
             CloseSession(slot, CloseReason.Invalid);
             PrintChat(slot, Chat("The store could not be opened right now."));
@@ -419,7 +425,7 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
         }
 
         if (session.LivePreview)
-            ShowEquippedOnPreview(session, pawn!);
+            ShowEquippedOnPreview(session, team);
 
         Render(session, layout);
         Class(session, layout, RootPanel, "show", true);
@@ -516,8 +522,8 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
         if (!_sessions.TryGetValue(slot, out var session) || !session.Open)
             return;
 
-        // Browse mode has no pawn requirement; live-preview mode does (its preview model and freeze are tied to the pawn).
-        if (_layoutHost.TryGet(slot) is not { } live || (session.LivePreview && GetLivePawn(slot) is null))
+        // Browse mode has no pawn requirement; live-preview mode needs its preview model and viewer.
+        if (_layoutHost.TryGet(slot) is not { } live || (session.LivePreview && !_preview.IsActive(slot)))
         {
             CloseSession(slot, CloseReason.Invalid);
             return;
@@ -604,12 +610,11 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
     }
 
     /// <summary>
-    /// Dresses the freshly spawned preview model in the items equipped for the pawn's team. The
-    /// store's equipment is the source of truth: a pawn's skin can't be read back from the game.
+    /// Dresses the freshly spawned preview model in the items equipped for <paramref name="team"/>.
+    /// The store's equipment is the source of truth: a pawn's skin can't be read back from the game.
     /// </summary>
-    private void ShowEquippedOnPreview(StoreSession session, IPlayerPawn pawn)
+    private void ShowEquippedOnPreview(StoreSession session, int team)
     {
-        var team = (int)pawn.Team;
         foreach (var equipped in session.Equipped.Where(e => e.Team == team))
         {
             if (_itemService.GetByUnique(equipped.Unique) is not { } item
@@ -1215,6 +1220,22 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
            && pawn.IsValid()
             ? pawn
             : null;
+
+    private IObserverPawn? GetObserverPawn(PlayerSlot slot)
+        => _bridge.ClientManager.GetGameClient(slot)?.GetPlayerController()?.GetObserverPawn() is { } observer
+           && observer.IsValid()
+            ? observer
+            : null;
+
+    /// <summary>
+    /// Model an observer's preview prop spawns with before it is dressed: the first equipped model
+    /// for <paramref name="team"/>, else the first model in the catalog. A living pawn uses its own.
+    /// </summary>
+    private string? FallbackPreviewModel(StoreSession session, int team)
+        => session.Equipped.Where(e => e.Team == team)
+                  .Select(e => _itemService.GetByUnique(e.Unique)?.Model)
+                  .Concat(_itemTypes.SelectMany(t => _itemService.GetBySlot(t.Slot)).Select(i => i.Model))
+                  .FirstOrDefault(m => !string.IsNullOrEmpty(m));
 
     // -------------------------
     // Helpers
