@@ -383,7 +383,9 @@
 	width: fill-parent-flow(1.0);
 	height: 100%;
 	flow-children: down;
-	margin: 0px 24px;
+	/* .LeftColumn (600px) is 150px wider than .RightColumn (450px); the extra right margin
+	   centres this column, and the rotate controls in it, on the screen where the model stands. */
+	margin: 0px 174px 0px 24px;
 }
 
 .PreviewBar {

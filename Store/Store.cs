@@ -108,7 +108,7 @@ public class Store : IModSharpModule
         services.AddSingleton<IPurchaseService, PurchaseService>();
 
         // Store HUD services
-        services.AddSingleton<StoreCameraService>();
+        services.AddSingleton<StorePreviewService>();
         services.AddSingleton<VisibilityPreferences>();
 
         // CreditsModule — registered as concrete type so IModule + ICredits can both resolve the same instance

@@ -95,7 +95,7 @@
 						</Panel>
 					</Panel>
 
-					<!-- Centre is left clear for the live player model (third-person store camera) -->
+					<!-- Centre is left clear for the store preview model -->
 					<Panel class="CenterColumn" hittest="false">
 						<Panel id="preview_bar" class="PreviewBar hud-hidden" hittest="false"><Label id="preview_lbl" class="PreviewLabel" hittest="false" text="{s:value}" /></Panel>
 						<Panel id="toast" class="Toast" hittest="false"><Label id="toast_lbl" class="ToastLabel" hittest="false" text="{s:value}" /></Panel>

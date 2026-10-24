@@ -90,7 +90,7 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
         public bool    Pending   { get; set; }
 
         /// <summary>
-        /// True when the player was alive on T/CT at open: third-person camera, freeze and live
+        /// True when the player was alive on T/CT at open: preview model, freeze and live
         /// preview. False is browse mode (dead / spectating): the full store, no pawn involved.
         /// </summary>
         public bool    LivePreview { get; set; }
@@ -100,9 +100,6 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
 
         /// <summary>Items currently shown in row_0..row_n, in row order.</summary>
         public List<ItemDefinition> Rows { get; } = [];
-
-        /// <summary>Pre-store pawn state per item type, captured on first preview of that type.</summary>
-        public Dictionary<IItemType, object?> Snapshots { get; } = [];
 
         public ICustomHudLayout? ClickLayout     { get; set; }
         public int               ToastGeneration { get; set; }
@@ -121,7 +118,7 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
     private readonly IInventoryRepository _inventoryRepo;
     private readonly ICredits _credits;
     private readonly AdminManagerHolder _adminManager;
-    private readonly StoreCameraService _camera;
+    private readonly StorePreviewService _preview;
     private readonly VisibilityPreferences _visibility;
     private readonly ILogger<StoreHudModule> _logger;
 
@@ -149,7 +146,7 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
         IInventoryRepository inventoryRepo,
         ICredits credits,
         AdminManagerHolder adminManager,
-        StoreCameraService camera,
+        StorePreviewService preview,
         VisibilityPreferences visibility,
         ILogger<StoreHudModule> logger)
     {
@@ -163,7 +160,7 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
         _inventoryRepo    = inventoryRepo;
         _credits          = credits;
         _adminManager     = adminManager;
-        _camera           = camera;
+        _preview          = preview;
         _visibility       = visibility;
         _logger           = logger;
 
@@ -200,7 +197,7 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
     {
         CloseAll(CloseReason.Shutdown);
         _layoutHost.KillAll();
-        _camera.StopAll();
+        _preview.StopAll();
 
         _bridge.ClientManager.RemoveCommandCallback("store", OnStoreCommand);
         _bridge.ClientManager.RemoveCommandCallback("shop",  OnStoreCommand);
@@ -229,7 +226,7 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
     {
         CloseAll(CloseReason.MapChange);
         _layoutHost.KillAll();
-        _camera.StopAll();
+        _preview.StopAll();
     }
 
     // Safety net for anything left over; every call here is validity-checked.
@@ -237,7 +234,7 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
     {
         CloseAll(CloseReason.MapChange);
         _layoutHost.KillAll();
-        _camera.StopAll();
+        _preview.StopAll();
     }
 
     int IGameListener.ListenerVersion  => IGameListener.ApiVersion;
@@ -251,7 +248,7 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
     {
         CloseSession(client.Slot, CloseReason.Disconnect);
         _layoutHost.Kill(client.Slot);
-        _camera.Stop(client.Slot);
+        _preview.Stop(client.Slot);
     }
 
     public void OnClientDisconnected(IGameClient client, NetworkDisconnectionReason reason)
@@ -286,7 +283,7 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
     }
 
     /// <summary>
-    /// Pawn lifecycle events only end live-preview sessions (camera, freeze and preview are tied to
+    /// Pawn lifecycle events only end live-preview sessions (preview model and freeze are tied to
     /// that pawn). A browse-mode session never touched the pawn, so it stays open.
     /// </summary>
     private void CloseLiveSession(PlayerSlot slot, CloseReason reason)
@@ -400,17 +397,20 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
         session.ClickLayout = layout.Entity;
         session.Open        = true;
 
-        // Live preview needs a living pawn on a team; everyone else browses without the camera.
+        // Live preview needs a living pawn on a team; everyone else browses without the preview model.
         var pawn = GetLivePawn(slot);
         session.LivePreview = pawn is { Team: CStrikeTeam.TE or CStrikeTeam.CT };
 
-        // No camera means no freeze: refuse rather than let a player walk around in a previewed model.
-        if (session.LivePreview && !_camera.Start(slot, pawn!))
+        // No preview model means no freeze: refuse rather than open a live store that can't show anything.
+        if (session.LivePreview && !_preview.Start(slot, pawn!))
         {
             CloseSession(slot, CloseReason.Invalid);
             PrintChat(slot, Chat("The store could not be opened right now."));
             return;
         }
+
+        if (session.LivePreview)
+            ShowEquippedOnPreview(session, pawn!);
 
         Render(session, layout);
         Class(session, layout, RootPanel, "show", true);
@@ -433,7 +433,7 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
     // -------------------------
 
     /// <summary>
-    /// Idempotent. Restores the preview, the camera, movement and the mouse, removes the click
+    /// Idempotent. Removes the preview model, restores movement and the mouse, removes the click
     /// callback and the HUD entity, and drops all per-slot state. Safe with a dead or missing pawn.
     /// </summary>
     public void CloseSession(PlayerSlot slot, CloseReason reason)
@@ -445,15 +445,7 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
         _generations[slot]++;
         session.Open = false;
 
-        // When the game itself respawns or resets the pawn, it re-applies the equipped items; restoring
-        // the pre-store snapshot then would put last life's (possibly other team's) model back on.
-        if (reason is not (CloseReason.Death or CloseReason.Respawn or CloseReason.TeamChange
-                           or CloseReason.RoundStart or CloseReason.MapChange or CloseReason.Disconnect))
-        {
-            RestorePreviews(session);
-        }
-
-        _camera.Stop(slot);
+        _preview.Stop(slot);
 
         // Release the mouse first and hide the store; the entity itself is killed afterwards.
         var detached = _layoutHost.Detach(slot);
@@ -492,7 +484,6 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
         }
 
         session.Pending = false;
-        session.Snapshots.Clear();
         session.TextCache.Clear();
         session.ClassCache.Clear();
         session.Rows.Clear();
@@ -506,26 +497,6 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
             CloseSession(slot, reason);
     }
 
-    /// <summary>
-    /// Puts each previewed type back: the item equipped for the pawn's current team if there is
-    /// one (this includes an item equipped during this session), otherwise the pre-store snapshot.
-    /// </summary>
-    private void RestorePreviews(StoreSession session)
-    {
-        if (session.Snapshots.Count == 0 || GetLivePawn(session.Slot) is not { } pawn)
-            return;
-
-        var team = (int)pawn.Team;
-        foreach (var (type, snapshot) in session.Snapshots)
-        {
-            var equipped = session.Equipped.FirstOrDefault(e => e.Slot == type.Slot && e.Team == team);
-            if (equipped is not null && _itemService.GetByUnique(equipped.Unique) is { } item)
-                type.Preview(pawn, item);
-            else
-                type.Restore(pawn, snapshot);
-        }
-    }
-
     // -------------------------
     // Clicks
     // -------------------------
@@ -536,7 +507,7 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
         if (!_sessions.TryGetValue(slot, out var session) || !session.Open)
             return;
 
-        // Browse mode has no pawn requirement; live-preview mode does (its camera orbits the pawn).
+        // Browse mode has no pawn requirement; live-preview mode does (its preview model and freeze are tied to the pawn).
         if (_layoutHost.TryGet(slot) is not { } live || (session.LivePreview && GetLivePawn(slot) is null))
         {
             CloseSession(slot, CloseReason.Invalid);
@@ -554,10 +525,10 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
             case "tab_settings": SwitchTab(session, Tab.Settings); break;
 
             case "cam_left":
-                if (!_camera.Rotate(slot, -1)) _logger.LogDebug("Store camera rotate ignored for slot {Slot}", slot);
+                if (!_preview.Rotate(slot, -1)) _logger.LogDebug("Store preview rotate ignored for slot {Slot}", slot);
                 return;
             case "cam_right":
-                if (!_camera.Rotate(slot, 1)) _logger.LogDebug("Store camera rotate ignored for slot {Slot}", slot);
+                if (!_preview.Rotate(slot, 1)) _logger.LogDebug("Store preview rotate ignored for slot {Slot}", slot);
                 return;
 
             case BuyConfirm:
@@ -637,15 +608,32 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
             ShowToast(session, "Settings could not be saved right now.", ToastKind.Error);
     }
 
+    /// <summary>
+    /// Dresses the freshly spawned preview model in the items equipped for the pawn's team. The
+    /// store's equipment is the source of truth: a pawn's skin can't be read back from the game.
+    /// </summary>
+    private void ShowEquippedOnPreview(StoreSession session, IPlayerPawn pawn)
+    {
+        var team = (int)pawn.Team;
+        foreach (var equipped in session.Equipped.Where(e => e.Team == team))
+        {
+            if (_itemService.GetByUnique(equipped.Unique) is not { } item
+                || _itemService.GetItemType(item.Unique) is not { } type)
+                continue;
+
+            if (!_preview.Show(session.Slot, type, item))
+                _logger.LogDebug("Equipped item {Unique} not shown on the store preview for slot {Slot}", item.Unique, session.Slot);
+        }
+    }
+
     private void PreviewItem(StoreSession session, ItemDefinition item)
     {
-        if (!session.LivePreview || GetLivePawn(session.Slot) is not { } pawn || _itemService.GetItemType(item.Unique) is not { } type)
+        if (!session.LivePreview || _itemService.GetItemType(item.Unique) is not { } type)
             return;
 
-        if (!session.Snapshots.ContainsKey(type))
-            session.Snapshots[type] = type.Snapshot(pawn);
-
-        type.Preview(pawn, item);
+        // Previews only ever touch the preview model, never the pawn.
+        if (!_preview.Show(session.Slot, type, item))
+            _logger.LogDebug("Store preview ignored for slot {Slot}", session.Slot);
     }
 
     // -------------------------
@@ -1117,8 +1105,7 @@ public class StoreHudModule : IModule, IClientListener, IGameListener, IEventLis
 
     private void ApplyPlayerData(StoreSession session, (HashSet<string> Owned, List<Equipment> Equipped) data)
     {
-        // Applied even to a closing session's object; harmless, and keeps RestorePreviews accurate
-        // if the close is still running on this frame.
+        // Applied even to a closing session's object; harmless.
         session.OwnedUniques = data.Owned;
         session.Equipped     = data.Equipped;
     }
