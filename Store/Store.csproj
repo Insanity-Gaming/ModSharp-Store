@@ -46,8 +46,9 @@
 
     <ItemGroup>
       <ProjectReference Include="..\Store.Shared\Store.Shared.csproj" />
-      <!-- HudArbiter's API; loaded from game/sharp/shared at runtime, never shipped with Store. -->
-      <ProjectReference Include="..\..\HudManager\HudArbiter.Shared\HudArbiter.Shared.csproj" Private="false" />
+      <!-- HudArbiter's API from the private Insanity-Gaming feed (see nuget.config). Loaded from
+           game/sharp/shared at runtime, so it is compile-only and never shipped with this module. -->
+      <PackageReference Include="InsanityGaming.HudArbiter.Shared" Version="1.0.2" ExcludeAssets="runtime" />
     </ItemGroup>
 
 </Project>
